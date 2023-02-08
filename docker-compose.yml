@@ -1,0 +1,52 @@
+# Copyright 2022 Centro ALGORITMI - University of Minho
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+#     Unless required by applicable law or agreed to in writing, software
+#     distributed under the License is distributed on an "AS IS" BASIS,
+#     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#     See the License for the specific language governing permissions and
+#     limitations under the License.
+
+version: "1.0"
+
+services:
+  mepmserver:
+      # image: uminhonetedge/mepm:1.0.0
+      # image: mepm:staging
+      container_name: mepmserver
+      build:
+        context: .
+        dockerfile: Dockerfile
+      ports:
+        - "8080:8080"
+      # volume binding for local development with hot-reload
+      volumes:
+        - ./mm3_nfv:/home/netedge/mm3_nfv/
+      restart: always
+      environment:
+        USER: netedge
+        PATH: "$PATH:/home/netedge/.local/bin"
+        ME_CONFIG_MONGODB_SERVER: "mongodb"
+        ME_CONFIG_MONGODB_PORT: 27017
+        ME_CONFIG_MONGODB_ADMINUSERNAME: ""
+        ME_CONFIG_MONGODB_ADMINPASSWORD: ""
+        ME_CONFIG_MONGODB_DATABASE: "mepm"
+
+  mongodb:
+    image: mongo
+    ports:
+      - "27017:27017"    
+
+  mongo-express:
+    image: mongo-express
+    ports:
+      - "8081:8081"
+    restart: always
+    environment:
+      - ME_CONFIG_MONGODB_SERVER=mongodb
+
