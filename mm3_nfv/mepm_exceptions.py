@@ -14,8 +14,7 @@
 
 from urllib import response
 #from mp1.models import ProblemDetails
-import ast
-import json
+
 
 class InvalidQuery(Exception):
     def __init__(self, error=437, message="Erro de exclusao mutua"):
