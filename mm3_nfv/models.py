@@ -1760,6 +1760,21 @@ class AppNetworkPolicy:
         return AppNetworkPolicy(SteeredNets(**data["steeredNetwork"]))
 
 
+
+class InstantiateAppRequest:
+    """
+    This data type represents request parameters of the "Instantiate Application" operation. It shall comply with the
+    provisions in clause 6.2.2.7.2, which aligns with the clause 6.3.1.3.
+
+    Section 6.2.2.7 Type: InstantiateAppRequest - MEC 010-2
+    """
+    def __init__(self) -> None:
+        pass
+    def from_json(data:dict) -> InstantiateAppRequest:
+        return InstantiateAppRequest()
+    def to_json(self):
+        pass
+
 class ConfigPlatformForAppRequest:
     """
     This data type represents the parameters for configuring the MEP to run an application instance.
@@ -1909,7 +1924,7 @@ class ConfigPlatformForAppRequest:
         )
 
 
-class ChangeAppInstanceState:
+class OperateAppRequest:
     def __init__(self, appInstanceId: str, changeStateTo: ChangeStateTo, stopType: StopType = None, gracefulStopTimeout: int = None) -> None:
         self.appInstanceId = appInstanceId
         self.changeStateTo = changeStateTo
@@ -1923,7 +1938,7 @@ class ChangeAppInstanceState:
         stopType = StopType(data.pop("stopType"))
         gracefulStopTimeout = int(data.pop("gracefulStopTimeout"))
 
-        return ChangeAppInstanceState(
+        return OperateAppRequest(
             appInstanceId=appInstanceId,
             changeStateTo=changeStateTo,
             stopType=stopType,

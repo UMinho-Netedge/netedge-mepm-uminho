@@ -14,7 +14,7 @@
 
 
 # MEC Platform Management Controllers
-from mm3_nfv.controllers.mepm_controller import MecPlatformMgMtController
+from mm3_nfv.controllers.app_lcm_controller import AppLcmController
 
 
 from mm3_nfv.databases.database_base import DatabaseBase
@@ -35,33 +35,41 @@ def main(database: Type[DatabaseBase]):
     mepm_dispatcher = cherrypy.dispatch.RoutesDispatcher()
 
     mepm_dispatcher.connect(
-        name="Configure MEC App instance on start-up",
-        action="mecApp_configure",
-        controller=MecPlatformMgMtController,
+        name="Provide configuration information in AppD to the MEPM-V, intended to configure the MEP to run the application instance.",
+        action="configurePlatformForApp",
+        controller=AppLcmController,
         route="/app_instances/:appInstanceId/configure_platform_for_app",
         conditions=dict(mecthod=["POST"]),
     )
 
     mepm_dispatcher.connect(
         name="Update MEC App instance Status",
-        action="mecApp_updateState",
-        controller=MecPlatformMgMtController,
+        action="operateApp",
+        controller=AppLcmController,
         route="/app_instances/:appInstanceId/operate",
         conditions=dict(method=["POST"]),
     )
 
     mepm_dispatcher.connect(
         name="Terminte MEC App instance",
-        action="mecApp_terminate",
-        controller=MecPlatformMgMtController,
+        action="terminateApp",
+        controller=AppLcmController,
         route="/app_instances/:appInstanceId/terminate",
+        conditions=dict(method=["POST"]),
+    )
+
+    mepm_dispatcher.connect(
+        name="Instantiate MEC App instance",
+        action="instantiateApp",
+        controller=AppLcmController,
+        route="/app_instances/:appInstanceId/instantiate",
         conditions=dict(method=["POST"]),
     )
 
     mepm_dispatcher.connect(
         name="Get configuration of MEC App instance",
         action="mecApp_config_get",
-        controller=MecPlatformMgMtController,
+        controller=AppLcmController,
         route="/applications/:appInstanceId/configuration",
         conditions=dict(method=["GET"]),
     )
@@ -69,7 +77,7 @@ def main(database: Type[DatabaseBase]):
     mepm_dispatcher.connect(
         name="Query all LCM Operations",
         action="lcmOpp_get_all",
-        controller=MecPlatformMgMtController,
+        controller=AppLcmController,
         route="/app_lcm_op_occs",
         conditions=dict(method=["GET"]),
     )
@@ -77,7 +85,7 @@ def main(database: Type[DatabaseBase]):
     mepm_dispatcher.connect(
         name="Query LCM Operation",
         action="lcmOpp_get",
-        controller=MecPlatformMgMtController,
+        controller=AppLcmController,
         route="/app_lcm_op_occs/:appLcmOpOccId",
         conditions=dict(method=["GET"]),
     )
@@ -85,7 +93,7 @@ def main(database: Type[DatabaseBase]):
     mepm_dispatcher.connect(
         name="Post MEC App Dns Rule",
         action="dns_rule_post_with_dns_rule_id",
-        controller=MecPlatformMgMtController,
+        controller=AppLcmController,
         route="/applications/:appInstanceId/dns_rule/:dnsRuleId",
         conditions=dict(method=["POST"]),
     )
@@ -93,7 +101,7 @@ def main(database: Type[DatabaseBase]):
     mepm_dispatcher.connect(
         name="Post MEC App Dns Rules",
         action="dns_rules_post",
-        controller=MecPlatformMgMtController,
+        controller=AppLcmController,
         route="/applications/:appInstanceId/dns_rules/",
         conditions=dict(method=["POST"]),
     )
@@ -101,7 +109,7 @@ def main(database: Type[DatabaseBase]):
     mepm_dispatcher.connect(
         name="Post MEC App Traffic Rule",
         action="traffic_rule_post_with_traffic_rule_id",
-        controller=MecPlatformMgMtController,
+        controller=AppLcmController,
         route="/applications/:appInstanceId/traffic_rule/:trafficRuleId",
         conditions=dict(method=["POST"]),
     )
@@ -109,7 +117,7 @@ def main(database: Type[DatabaseBase]):
     mepm_dispatcher.connect(
         name="Post MEC App Traffic Rules",
         action="traffic_rules_post",
-        controller=MecPlatformMgMtController,
+        controller=AppLcmController,
         route="/applications/:appInstanceId/traffic_rules/",
         conditions=dict(method=["POST"]),
     )
