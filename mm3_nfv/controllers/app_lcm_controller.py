@@ -31,7 +31,7 @@ class AppLcmController:
 #######################################################################################
     @cherrypy.tools.json_in()
     @json_out(cls=NestedEncoder)
-    def InstantiateApp(self, appInstanceId: str):
+    def instantiateApp(self, appInstanceId: str):
         """
             7.4.6 Resource: instantiate application instance task
             Resource URI: {apiRoot}/app_lcm/v1/app_instances/{appInstanceId}/instantiate
