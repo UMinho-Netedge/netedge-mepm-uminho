@@ -23,7 +23,7 @@ services:
         context: .
         dockerfile: Dockerfile
       ports:
-        - "8080:8080"
+        - "8083:8083"
       # volume binding for local development with hot-reload
       volumes:
         - ./mm3_nfv:/home/netedge/mm3_nfv/
@@ -40,12 +40,12 @@ services:
   mongodb:
     image: mongo
     ports:
-      - "27017:27017"    
+      - "27018:27017"    
 
   mongo-express:
     image: mongo-express
     ports:
-      - "8081:8081"
+      - "8084:8081"
     restart: always
     environment:
       - ME_CONFIG_MONGODB_SERVER=mongodb

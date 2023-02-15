@@ -19,8 +19,13 @@ from mm3_nfv.models import *
 from hashlib import md5
 import uuid
 from mm3_nfv.controllers.app_callback_controller import *
-from osmclient import client
+#from osmclient import client
 import yaml
+import copy
+
+HEADERS = {"Content-Type": "application/json"}
+PORT = '8085'
+API_ADDRESS = '172.26.3.15'
 
 
 class AppLcmController:
@@ -278,13 +283,17 @@ class AppLcmController:
             return error.message()
 
         data = cherrypy.request.json
-
+        data_aux = copy.deepcopy(data)
+        
         try:
             configRequest = ConfigPlatformForAppRequest.from_json(data)
         except (TypeError, jsonschema.exceptions.ValidationError) as e:
             error = BadRequest(e)
             return error.message()
 
+        # Send configuration to MEP via Mm5
+        url = "http://%s:%s/mec_platform_mgmt/v1/app_instances/%s/configure_platform_for_app" % (API_ADDRESS, PORT, appInstanceId)
+        mm5_response = requests.post(url, headers=HEADERS, data=json.dumps(data_aux))
 
         appState  = AppInstanceState(InstantiationState.INSTANTIATED.value, OperationalState.STARTED.value)
         appStatusDict = dict(
@@ -297,18 +306,36 @@ class AppLcmController:
 
         lifecycleOperationOccurrenceId = str(uuid.uuid4())
         lastModified = cherrypy.response.headers['Date']
+
+        
+        if mm5_response.status_code != 201:
+            lcmOperationOccurence = dict(
+                lifecycleOperationOccurrenceId=lifecycleOperationOccurrenceId,
+                appInstanceId=appInstanceId, 
+                stateEnteredTime=lastModified,
+                operation="STARTING",
+                operationStatus=OperationState.FAILED_TEMP.name
+            )
+
+            cherrypy.thread_data.db.create("lcmOperations", lcmOperationOccurence)
+            cherrypy.response.status = mm5_response.status_code
+
+            resp = mm5_response.json()
+            resp["detail"] = resp["detail"] + " Created LCM Operation Occurrence with id: %s (Operation state FAILED_TEMP)." %lifecycleOperationOccurrenceId
+            return resp
     
-        lcmOperationOccurence = dict(
-            lifecycleOperationOccurrenceId=lifecycleOperationOccurrenceId,
-            appInstanceId=appInstanceId, 
-            stateEnteredTime=lastModified,
-            operation="STARTING",
-            operationStatus=OperationStatus.PROCESSING.name
-        )
+        else:
+            lcmOperationOccurence = dict(
+                lifecycleOperationOccurrenceId=lifecycleOperationOccurrenceId,
+                appInstanceId=appInstanceId, 
+                stateEnteredTime=lastModified,
+                operation="STARTING",
+                operationStatus=OperationStatus.PROCESSING.name
+            )
 
-        cherrypy.thread_data.db.create("lcmOperations", lcmOperationOccurence)
+            cherrypy.thread_data.db.create("lcmOperations", lcmOperationOccurence)
+            cherrypy.response.status = 201
 
-        cherrypy.response.status = 201
         return dict(lifecycleOperationOccurrenceId=lifecycleOperationOccurrenceId)
 
 

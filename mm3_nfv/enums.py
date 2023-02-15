@@ -134,6 +134,13 @@ class OperationStatus(Enum):
     SUCCESSFULLY_DONE = "SUCCESSFULLY_DONE"
     FAILED = "FAILED"
 
+class OperationState(Enum):
+    STARTING = "STARTING"       # the LCM operation starting
+    PROCESSING = "PROCESSING"   # the LCM operation is currently in execution
+    COMPLETED = "COMPLETED"     # the LCM operation has been completed
+    FAILED = "FAILED"           # the LCM operation has failed and it cannot be retried, as it is determined that such action will not succeed
+    FAILED_TEMP = "FAILED_TEMP" # tThe LCM operation has failed and execution has stopped, but the execution of the operation is not considered to be closed.
+
 class InstantiationState(Enum):
     NOT_INSTANTIATED = "NOT_INSTANTIATED"
     INSTANTIATED = "INSTANTIATED"

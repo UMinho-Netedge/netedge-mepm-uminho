@@ -125,7 +125,7 @@ def main(database: Type[DatabaseBase]):
     ############################################################################
 
     cherrypy.config.update(
-        {"server.socket_host": "0.0.0.0", "server.socket_port": 8085}
+        {"server.socket_host": "0.0.0.0", "server.socket_port": 8083}
     )
 
     # MEPM config (mm3_nfv - extra mm3_nfv)
