@@ -13,8 +13,7 @@
 #     limitations under the License.
 
 # Byte-compiled / optimized / DLL files
-__pycache__/
-mm3_nfv/__pycache__/
+**/__pycache__/
 *.py[cod]
 *$py.class
 

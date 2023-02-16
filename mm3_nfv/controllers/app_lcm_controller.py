@@ -200,7 +200,7 @@ class AppLcmController:
             find_one=True,
         )
 
-        # If app exists in db
+        # If app does not exists in db
         if appStatus is None:
             error_msg = "Application %s is not instantiated." % (appInstanceId)
             error = Conflict(error_msg)
@@ -211,13 +211,20 @@ class AppLcmController:
         # for filtering after saving to the database
         try:
             # Verify the requestion body if its correct about its schema:
-            termination = TerminateAppInstance.from_json(data)
-
+            termination = TerminateAppInstance.from_json(copy.deepcopy(data))
         except (TypeError, jsonschema.exceptions.ValidationError) as e:
             error = BadRequest(e)
             return error.message()
 
-        
+        if data['appInstanceId'] != appInstanceId:
+            error_msg = "Application in body %s does not match the one in the URL %s." % (data['appInstanceId'], appInstanceId)
+            error = BadRequest(error_msg)
+            return error.message()
+
+        # Send configuration to MEP via Mm5
+        url = "http://%s:%s/mec_platform_mgmt/v1/app_instances/%s/terminate" % (API_ADDRESS, PORT, appInstanceId)
+        mm5_response = requests.post(url, headers=HEADERS, data=json.dumps(data))
+
         appInstanceDict = dict(appInstanceId=appInstanceId)
         appStatusDict = dict(
             {"indication" : OperationActionType.TERMINATING.name}
@@ -232,15 +239,31 @@ class AppLcmController:
         lifecycleOperationOccurrenceId = str(uuid.uuid4())
         lastModified = cherrypy.response.headers['Date']
 
-        lcmOperationOccurence = dict(
-            lifecycleOperationOccurrenceId=lifecycleOperationOccurrenceId,
-            appInstanceId=appInstanceId, 
-            stateEnteredTime=lastModified,
-            operation=OperationActionType.TERMINATING.name,
-            operationStatus=OperationStatus.PROCESSING.name
-        )
+        if mm5_response.status_code != 200:
+            lcmOperationOccurence = dict(
+                lifecycleOperationOccurrenceId=lifecycleOperationOccurrenceId,
+                appInstanceId=appInstanceId, 
+                stateEnteredTime=lastModified,
+                operation=OperationActionType.TERMINATING.name,
+                operationStatus=OperationState.FAILED_TEMP.name
+            )
+            cherrypy.thread_data.db.create("lcmOperations", lcmOperationOccurence)
+            cherrypy.response.status = mm5_response.status_code
+            
+            resp = mm5_response.json()
+            resp["detail"] = resp["detail"] + " Created LCM Operation Occurrence with id: %s (Operation state FAILED_TEMP)." %lifecycleOperationOccurrenceId
+            return resp
 
-        cherrypy.thread_data.db.create("lcmOperations", lcmOperationOccurence)
+        else:
+            lcmOperationOccurence = dict(
+                lifecycleOperationOccurrenceId=lifecycleOperationOccurrenceId,
+                appInstanceId=appInstanceId, 
+                stateEnteredTime=lastModified,
+                operation=OperationActionType.TERMINATING.name,
+                operationStatus=OperationStatus.PROCESSING.name
+            )
+            cherrypy.thread_data.db.create("lcmOperations", lcmOperationOccurence)
+            cherrypy.response.status = 201
 
         # TO-DO Check the MEP that controls the appInstanceId
         # send a terminate request to MEP (remove configuration)
