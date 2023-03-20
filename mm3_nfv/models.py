@@ -2070,6 +2070,27 @@ class AppInstanceInfo:
         """
         pass
 
+
+############################ Host and Platform info ##################################################
+
+class MECHostInformation:
+    def __init__(self, hostName: str, hostId: str) -> None:
+        self.hostName = hostName
+        self.hostId = hostId
+
+    def from_json(data: dict) -> MECHostInformation:
+        hostName = LinkType.from_json(data.pop("hostName"))
+        hostId = LinkType.from_json(data.pop("hostId"))
+        return MECHostInformation(hostName=hostName, hostId=hostId)
+
+    def to_json(self):
+        return ignore_none_value(
+            dict(
+                hostName=self.hostName,
+                hostId=self.hostId
+            )
+        )
+
 ############################ EXTRA SERVICES (DNS AND OAUTH) ###########################################
 
 class OAuthServer:
