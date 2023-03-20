@@ -1,0 +1,2 @@
+[submodule "osmclient"]
+	url = https://osm.etsi.org/gitlab/osm/osmclient.git
