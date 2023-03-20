@@ -12,23 +12,23 @@
 #     See the License for the specific language governing permissions and
 #     limitations under the License.
 
-
-FROM alpine:3.17.1
-
+FROM python:3.9
 LABEL org.opencontainers.image.source="https://github.com/UMinho-Netedge/netedge-mepm-uminho/"
 
-RUN adduser -D -h /home/netedge netedge
-#RUN useradd -m -d /home/netedge netedge
-
-RUN apk update
-RUN apk add --no-cache python3 py3-pip
-#RUN ["apt-get", "update"]
+RUN ["apt-get", "update"]
 
 COPY ./ /home/netedge
-USER netedge
 ENV PATH="$PATH:/home/netedge/.local/bin"
-#RUN ["/usr/local/bin/python", "-m", "pip", "install", "--upgrade", "pip"]
 RUN ["pip","install","-r","/home/netedge/requirements.txt"]
+
+RUN ["apt-get", "install", "libcurl4-openssl-dev"]
+RUN ["apt-get", "install", "libssl-dev"]
+RUN ["pip", "install", "python-magic"]
+RUN ["pip", "install", "git+https://osm.etsi.org/gerrit/osm/IM", "--upgrade"]
+RUN ["pip", "install", "git+https://osm.etsi.org/gerrit/osm/osmclient"]
+RUN ["pip", "install", "-r", "/home/netedge/osmclient/requirements.txt"]
+
+ENV OSM_CLIENT_VERSION=v13.0
 
 ENTRYPOINT ["python3"]
 CMD ["/home/netedge/main.py","--mongodb_addr","127.0.0.1","--mongodb_database","mepm"]

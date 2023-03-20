@@ -12,6 +12,7 @@
 #     See the License for the specific language governing permissions and
 #     limitations under the License.
 
+import os
 import sys
 import jsonschema
 sys.path.append("../../")
@@ -19,13 +20,18 @@ from mm3_nfv.models import *
 from hashlib import md5
 import uuid
 from mm3_nfv.controllers.app_callback_controller import *
-#from osmclient import client
+
+from osmclient import client
+from osmclient.common.exceptions import ClientException
+
 import yaml
 import copy
 
 HEADERS = {"Content-Type": "application/json"}
-PORT = '8085'
-API_ADDRESS = '172.26.3.15'
+
+MM5_PORT = cherrypy.config.get("mm5_port")
+MM5_ADDRESS = cherrypy.config.get("mm5_address")
+OSM_SERVER = cherrypy.config.get("osm_server")
 
 
 class AppLcmController:
@@ -97,7 +103,7 @@ class AppLcmController:
         # hostname = "192.168.86.216"
         # myclient = client.Client(host=hostname, sol005=True)
         # createNS = myclient.ns.create(nsd, nsName, accountNS)
-        # TO-DO errors 401, 403, 404, 406 and 429 
+        # TODO: errors 401, 403, 404, 406 and 429 
 
         cherrypy.response.status = 202
         return dict(lifecycleOperationOccurrenceId=lifecycleOperationOccurrenceId)
@@ -222,7 +228,7 @@ class AppLcmController:
             return error.message()
 
         # Send configuration to MEP via Mm5
-        url = "http://%s:%s/mec_platform_mgmt/v1/app_instances/%s/terminate" % (API_ADDRESS, PORT, appInstanceId)
+        url = "http://%s:%s/mec_platform_mgmt/v1/app_instances/%s/terminate" % (MM5_ADDRESS, MM5_PORT, appInstanceId)
         mm5_response = requests.post(url, headers=HEADERS, data=json.dumps(data))
 
         appInstanceDict = dict(appInstanceId=appInstanceId)
@@ -239,6 +245,8 @@ class AppLcmController:
         lifecycleOperationOccurrenceId = str(uuid.uuid4())
         lastModified = cherrypy.response.headers['Date']
 
+        # If operation TERMINATING fails in MEP, create LCM Operation 
+        # Occurrence with state FAILED_TEMP
         if mm5_response.status_code != 200:
             lcmOperationOccurence = dict(
                 lifecycleOperationOccurrenceId=lifecycleOperationOccurrenceId,
@@ -254,6 +262,8 @@ class AppLcmController:
             resp["detail"] = resp["detail"] + " Created LCM Operation Occurrence with id: %s (Operation state FAILED_TEMP)." %lifecycleOperationOccurrenceId
             return resp
 
+        # If operation TERMINATING succeeds in MEP, create LCM Operation 
+        # Occurrence with state PROCESSING
         else:
             lcmOperationOccurence = dict(
                 lifecycleOperationOccurrenceId=lifecycleOperationOccurrenceId,
@@ -263,18 +273,23 @@ class AppLcmController:
                 operationStatus=OperationStatus.PROCESSING.name
             )
             cherrypy.thread_data.db.create("lcmOperations", lcmOperationOccurence)
+
+            # TO-DO Check the MEP that controls the appInstanceId
+            # send a terminate request to MEP (remove configuration)
+            # proceed to NS removal
+            # hostname = "192.168.86.216"
+            # myclient = client.Client(host=hostname, sol005=True)
+            # createNS = myclient.ns.delete(nsName)
+            # set application instantiationState to "NOT_INSTANTIATED"
+            # TO-DO errors 401, 403, 404, 406 and 429
+
+            # Remove App Instance from appStatus
+            appInstanceDict = dict(appInstanceId=appInstanceId)
+            cherrypy.thread_data.db.remove("appStatus", appInstanceDict)
+
             cherrypy.response.status = 201
 
-        # TO-DO Check the MEP that controls the appInstanceId
-        # send a terminate request to MEP (remove configuration)
-        # proceed to NS removal
-        # hostname = "192.168.86.216"
-        # myclient = client.Client(host=hostname, sol005=True)
-        # createNS = myclient.ns.delete(nsName)
-        # set application instantiationState to "NOT_INSTANTIATED"
-        # TO-DO errors 401, 403, 404, 406 and 429 
-
-        return dict(lifecycleOperationOccurrenceId=lifecycleOperationOccurrenceId)
+            return dict(lifecycleOperationOccurrenceId=lifecycleOperationOccurrenceId)
 
 
     @cherrypy.tools.json_in()
@@ -315,7 +330,7 @@ class AppLcmController:
             return error.message()
 
         # Send configuration to MEP via Mm5
-        url = "http://%s:%s/mec_platform_mgmt/v1/app_instances/%s/configure_platform_for_app" % (API_ADDRESS, PORT, appInstanceId)
+        url = "http://%s:%s/mec_platform_mgmt/v1/app_instances/%s/configure_platform_for_app" % (MM5_ADDRESS, MM5_PORT, appInstanceId)
         mm5_response = requests.post(url, headers=HEADERS, data=json.dumps(data_aux))
 
         appState  = AppInstanceState(InstantiationState.INSTANTIATED.value, OperationalState.STARTED.value)
@@ -360,26 +375,6 @@ class AppLcmController:
             cherrypy.response.status = 201
 
         return dict(lifecycleOperationOccurrenceId=lifecycleOperationOccurrenceId)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -532,249 +527,13 @@ class AppLcmController:
         return result
 
 
-    @cherrypy.tools.json_in()
     @json_out(cls=NestedEncoder)
-    def traffic_rule_post_with_traffic_rule_id(self, appInstanceId: str, trafficRuleId: str):
-        cherrypy.log("Request to configure traffic rule %s received" %appInstanceId)
-        appStatus = cherrypy.thread_data.db.query_col(
-            "appStatus",
-            query=dict(appInstanceId=appInstanceId),
-            find_one=True,
-        )
+    def osmclient_tests(self, appInstanceId: str):
+        cherrypy.log("Request to test osmclient received")
+        hostname = "192.168.86.210"
+        myclient = client.Client(host=hostname, sol005=True)
+        resp = myclient.nsd.list()
+        print(yaml.safe_dump(resp, indent=4, default_flow_style=False))
 
-        # If app does not exist in db
-        if appStatus is None:
-            error_msg = "Application %s was not found." % (appInstanceId)
-            error = NotFound(error_msg)
-            return error.message()
-
-        data = cherrypy.request.json
-        try:
-            trafficRule = TrafficRule.from_json(data)
-
-        except (TypeError, jsonschema.exceptions.ValidationError) as e:
-            error = BadRequest(e)
-            return error.message()
-
-        if appStatus['indication'] == IndicationType.READY.name or appStatus['indication'] == "STARTING":
-
-            # Check if the traffic rule already exists and return error message
-            result = cherrypy.thread_data.db.query_col(
-                "trafficRules", 
-                query=dict(trafficRuleId=trafficRuleId),
-                fields=dict(appInstanceId=0),
-                find_one=True
-            )
-
-            # If trafficrule does not exist in db
-            if result is not None:
-                error_msg = "Traffic rule %s already configured." % (trafficRuleId)
-                error = NotFound(error_msg)
-                return error.message()           
-            
-
-            CallbackController.execute_callback(
-                args=[appInstanceId, trafficRule],
-                func=CallbackController._configureTrafficRule,
-                sleep_time=5
-            )
-
-            cherrypy.thread_data.db.create(
-                "trafficRules",
-                object_to_mongodb_dict(
-                trafficRule,
-                extra=dict(appInstanceId=appInstanceId)
-                )
-            )
-
-            cherrypy.response.status = 201
-            return trafficRule
-
-
-        else:
-            error_msg = "Application %s is in %s state. This operation not allowed in this state." % (
-            appInstanceId, appStatus["indication"])
-            error = Forbidden(error_msg)
-            return error.message()
-
-
-    @cherrypy.tools.json_in()
-    @json_out(cls=NestedEncoder)
-    def traffic_rules_post(self, appInstanceId: str):
-
-        cherrypy.log("Request to configure traffic rules for App %s received" %appInstanceId)
-        appStatus = cherrypy.thread_data.db.query_col(
-            "appStatus",
-            query=dict(appInstanceId=appInstanceId),
-            find_one=True,
-        )
-
-        # If app does not exist in db
-        if appStatus is None:
-            error_msg = "Application %s was not found." % (appInstanceId)
-            error = NotFound(error_msg)
-            return error.message()
-
-        data = cherrypy.request.json
-        trafficRules = []
-        for rule in data:
-            try:
-                trafficRuleId = rule["trafficRuleId"]
-                # Check if the traffic rule already exists and return error message
-                result = cherrypy.thread_data.db.query_col(
-                    "trafficRules", 
-                    query=dict(trafficRuleId=trafficRuleId),
-                    fields=dict(appInstanceId=0),
-                    find_one=True
-                )
-
-                # If trafficrule exists in db
-                if result is not None:
-                    error_msg = "Traffic rule %s already configured." % (trafficRuleId)
-                    error = NotFound(error_msg)
-                    return error.message()
-                
-                trafficRule = TrafficRule.from_json(rule)
-                trafficRules.append(trafficRule)
-
-            except (TypeError, jsonschema.exceptions.ValidationError) as e:
-                error = BadRequest(e)
-                return error.message()
-
-        if appStatus['indication'] == IndicationType.READY.name or appStatus['indication'] == "STARTING":
-
-            for rule in trafficRules:
-                
-                CallbackController.execute_callback(
-                    args=[appInstanceId, rule],
-                    func=CallbackController._configureTrafficRule,
-                    sleep_time=5
-                )
-
-                cherrypy.thread_data.db.create(
-                    "trafficRules",
-                    object_to_mongodb_dict(
-                    rule,
-                    extra=dict(appInstanceId=appInstanceId)
-                    )
-                )
-
-            cherrypy.response.status = 201
-            return trafficRules
-
-
-        else:
-            error_msg = "Application %s is in %s state. This operation not allowed in this state." % (
-            appInstanceId, appStatus["indication"])
-            error = Forbidden(error_msg)
-            return error.message()
-
-
-    @cherrypy.tools.json_in()
-    @json_out(cls=NestedEncoder)
-    def dns_rule_post_with_dns_rule_id(self, appInstanceId: str, dnsRuleId: str):
-        data = cherrypy.request.json
-
-        try:
-            dnsRule = DnsRule.from_json(data)
-        except (TypeError, jsonschema.exceptions.ValidationError) as e:
-            error = BadRequest(e)
-            return error.message()
-
-        new_rec = dnsRule.to_json()
-
-        if new_rec["dnsRuleId"] != dnsRuleId:
-            error_msg = "dnsRuleId in request body must match the one in URI."
-            error = BadRequest(error_msg)
-            return error.message()
-
-        #print(f"tests_controller new_rec:\n{new_rec}")
-
-        # Generate hash
-        rule = json.dumps(new_rec)
-        new_etag = md5(rule.encode('utf-8')).hexdigest()
-        # print(f"\nPOST new_etag: {new_etag}")
-
-        # Add headers
-        cherrypy.response.headers['ETag'] = new_etag
-        lastModified = cherrypy.response.headers['Date']
-        cherrypy.response.headers['Last-Modified'] = lastModified
-
-
-        query = dict(appInstanceId=appInstanceId, dnsRuleId=dnsRuleId)
-
-        # to assure correct document override
-        if cherrypy.thread_data.db.count_documents("dnsRules", query) > 0:
-            cherrypy.thread_data.db.remove("dnsRules", query)
-
-        dnsApiServer = cherrypy.config.get("dns_api_server")
-
-        dnsApiServer.create_record(new_rec["domainName"], new_rec["ipAddress"], new_rec["ttl"])
-
-        new_rec = {
-            "appInstanceId": appInstanceId, 
-            "lastModified": lastModified,
-            } | new_rec
-        cherrypy.thread_data.db.create("dnsRules", new_rec)
-   
-        cherrypy.response.status = 200
-        return dnsRule
-
-
-    @cherrypy.tools.json_in()
-    @json_out(cls=NestedEncoder)
-    def dns_rules_post(self, appInstanceId: str):
-
-        cherrypy.log("Request to configure dns rules for App %s received" %appInstanceId)
-        appStatus = cherrypy.thread_data.db.query_col(
-            "appStatus",
-            query=dict(appInstanceId=appInstanceId),
-            find_one=True,
-        )
-
-        # If app does not exist in db
-        if appStatus is None:
-            error_msg = "Application %s was not found." % (appInstanceId)
-            error = NotFound(error_msg)
-            return error.message()
-
-        data = cherrypy.request.json
-
-        for rule in data:
-            try:
-                dnsRule = DnsRule.from_json(rule)
-            except (TypeError, jsonschema.exceptions.ValidationError) as e:
-                error = BadRequest(e)
-                return error.message()
-
-            new_rec = dnsRule.to_json()
-
-            #print(f"tests_controller new_rec:\n{new_rec}")
-
-            # Generate hash
-            rule = json.dumps(new_rec)
-            new_etag = md5(rule.encode('utf-8')).hexdigest()
-            # print(f"\nPOST new_etag: {new_etag}")
-
-            # Add headers
-            cherrypy.response.headers['ETag'] = new_etag
-            lastModified = cherrypy.response.headers['Date']
-            cherrypy.response.headers['Last-Modified'] = lastModified
-
-
-            query = dict(appInstanceId=appInstanceId, dnsRuleId=new_rec["dnsRuleId"])
-
-            # to assure correct document override
-            if cherrypy.thread_data.db.count_documents("dnsRules", query) > 0:
-                cherrypy.thread_data.db.remove("dnsRules", query)
-
-            new_rec = {
-                "appInstanceId": appInstanceId, 
-                "lastModified": lastModified,
-                } | new_rec
-            cherrypy.thread_data.db.create("dnsRules", new_rec)
-   
-        cherrypy.response.status = 200
-        return data
-
+        return resp
 

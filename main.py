@@ -90,36 +90,14 @@ def main(database: Type[DatabaseBase]):
         conditions=dict(method=["GET"]),
     )
 
-    mepm_dispatcher.connect(
-        name="Post MEC App Dns Rule",
-        action="dns_rule_post_with_dns_rule_id",
-        controller=AppLcmController,
-        route="/applications/:appInstanceId/dns_rule/:dnsRuleId",
-        conditions=dict(method=["POST"]),
-    )
 
+    ############################################################################
     mepm_dispatcher.connect(
-        name="Post MEC App Dns Rules",
-        action="dns_rules_post",
+        name="Testing OSMclient",
+        action="osmclient_tests",
         controller=AppLcmController,
-        route="/applications/:appInstanceId/dns_rules/",
-        conditions=dict(method=["POST"]),
-    )
-
-    mepm_dispatcher.connect(
-        name="Post MEC App Traffic Rule",
-        action="traffic_rule_post_with_traffic_rule_id",
-        controller=AppLcmController,
-        route="/applications/:appInstanceId/traffic_rule/:trafficRuleId",
-        conditions=dict(method=["POST"]),
-    )
-
-    mepm_dispatcher.connect(
-        name="Post MEC App Traffic Rules",
-        action="traffic_rules_post",
-        controller=AppLcmController,
-        route="/applications/:appInstanceId/traffic_rules/",
-        conditions=dict(method=["POST"]),
+        route="/app_instances/:appInstanceId/osmclient",
+        conditions=dict(method=["GET"]),
     )
 
     ############################################################################
@@ -187,4 +165,12 @@ if __name__ == "__main__":
     dnsApiServer = DnsApiServer(dns_api_addr, dns_api_port)
     cherrypy.config.update({"dns_api_server": dnsApiServer})
     
+    mm5_Address = os.environ.get("MM5_ADDR")
+    mm5_Port = os.environ.get("MM5_PORT")
+    cherrypy.config.update({"mm5_address": mm5_Address})
+    cherrypy.config.update({"mm5_port": mm5_Port})
+
+    osm_Server = os.environ.get("OSM_SERVER")
+    cherrypy.config.update({"osm_server": osm_Server})
+
     main(database)
