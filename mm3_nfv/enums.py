@@ -148,3 +148,19 @@ class InstantiationState(Enum):
 class OperationalState(Enum):
     STARTED = "STARTED"
     STOPPED = "STOPPED"
+
+class CpuPinningPolicy(Enum):
+    STATIC = "STATIC"
+    DYNAMIC = "DYNAMIC"
+
+class TypeOfStorage(Enum):
+    BLOCK = "BLOCK"
+    OBJECT = "OBJECT"
+    FILE = "FILE"
+
+class SupportedMigrationType(Enum):
+    NO_MIGRATION = "NO_MIGRATION"
+    OFFLINE_MIGRATION = "OFFLINE_MIGRATION"
+    LIVE_MIGRATION = "LIVE_MIGRATION"
+
+

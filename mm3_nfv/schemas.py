@@ -18,6 +18,20 @@
 # from a mec app. These schemas are json schemas that represent valid  #
 # inputs that a mec app can execute                                    #
 ########################################################################
+
+# TODO: add the rest of the parameters
+instanceNsRequest_schema = {
+    "type": "object",
+    "properties": {
+        "nsName": {"type": "string"},
+        "nsdId": {"type": "string"},
+        "vimAccountId": {"type": "string"},
+    },
+    "required": ["nsName", "nsdId", "vimAccountId"],
+    "additionalProperties": False,
+}
+
+
 linktype_schema = {
     "type": "object",
     "properties": {

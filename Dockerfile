@@ -13,6 +13,7 @@
 #     limitations under the License.
 
 FROM python:3.9
+#FROM python:3.9-slim
 LABEL org.opencontainers.image.source="https://github.com/UMinho-Netedge/netedge-mepm-uminho/"
 
 RUN ["apt-get", "update"]
@@ -21,9 +22,10 @@ COPY ./ /home/netedge
 ENV PATH="$PATH:/home/netedge/.local/bin"
 RUN ["pip","install","-r","/home/netedge/requirements.txt"]
 
-RUN ["apt-get", "install", "libcurl4-openssl-dev"]
-RUN ["apt-get", "install", "libssl-dev"]
+RUN ["apt-get", "-y", "install", "libcurl4-openssl-dev"]
+RUN ["apt-get", "-y", "install", "libssl-dev"]
 RUN ["pip", "install", "python-magic"]
+RUN ["apt-get", "install", "-y", "git"]
 RUN ["pip", "install", "git+https://osm.etsi.org/gerrit/osm/IM", "--upgrade"]
 RUN ["pip", "install", "git+https://osm.etsi.org/gerrit/osm/osmclient"]
 RUN ["pip", "install", "-r", "/home/netedge/osmclient/requirements.txt"]

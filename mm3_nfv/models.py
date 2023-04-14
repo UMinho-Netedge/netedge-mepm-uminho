@@ -1760,21 +1760,6 @@ class AppNetworkPolicy:
         return AppNetworkPolicy(SteeredNets(**data["steeredNetwork"]))
 
 
-
-class InstantiateAppRequest:
-    """
-    This data type represents request parameters of the "Instantiate Application" operation. It shall comply with the
-    provisions in clause 6.2.2.7.2, which aligns with the clause 6.3.1.3.
-
-    Section 6.2.2.7 Type: InstantiateAppRequest - MEC 010-2
-    """
-    def __init__(self) -> None:
-        pass
-    def from_json(data:dict) -> InstantiateAppRequest:
-        return InstantiateAppRequest()
-    def to_json(self):
-        pass
-
 class ConfigPlatformForAppRequest:
     """
     This data type represents the parameters for configuring the MEP to run an application instance.
@@ -2037,6 +2022,61 @@ class Links_:
         return Links_(self_=self_, instantiate=instantiate, terminate=terminate, operate=operate, configure_platform_for_app=configure_platform_for_app)
 
 
+# TODO: Complete this
+class CivicAddressElement:
+    def __init__(
+        self,
+        caType: int,
+        caValue: str,
+    ):
+        self.caType = caType
+        self.caValue = caValue
+
+
+# TODO: Complete
+class LocationInformation:
+    """
+    This data type represents the location information of the site hosting the 
+    MEC application instance.
+    
+    Section 6.2.2.31 of ETIS MEC 010-2 v2.2.1 (2022-02)
+    """
+    def __init__(
+        self,
+        countryCode: str,
+        civicAddress: List(CivicAddressElement) = None,
+    ):
+        self.countryCode = countryCode
+        self.civicAddress = civicAddress
+
+
+# TODO: Complete
+class InstantiationAppState:
+    def __init__(
+        self,
+        operationalState: OperationalState,
+        appInstLocation: LocationInformation,
+    ):
+        self.operationalState = operationalState
+        self.appInstLocation = appInstLocation
+
+
+# TODO: Complete
+class CommunicationInterface:
+    """
+    This data type represents the communication interface of an application instance.
+
+    Section 7.5.2 of ETSI GS MEC 021 v2.2.1 (2022-02)
+    """
+    def __init__(
+        self,
+        host: str,
+        port: int,
+    ):
+        self.host = host
+        self.port = port
+
+
 # New
 class AppInstanceInfo:
     """
@@ -2060,7 +2100,7 @@ class AppInstanceInfo:
         nsInstanceId: str = None,
         vnfInstaneId: str = None,
         instantiationAppState: InstantiationAppState = None,
-        communicationInterface: CommunicationInterface = None,
+        communicationInterface: List(CommunicationInterface) = None,
         _links: Links_ = None,
         ):
         """
@@ -2068,13 +2108,40 @@ class AppInstanceInfo:
         :param appDId: Identifier of the application descriptor associated with this application instance. ThIS identifier is managed by the application provider to identify the application descriptor in a globally unique way.
 
         """
-        pass
+        self.id = id
+        self.appDId = appDId
+        self.appProvider = appProvider
+        self.appName = appName
+        self.appSoftVersion = appSoftVersion
+        self.appDVersion = appDVersion
+        self.appPkgId = appPkgId
+        self.appInstanceName = appInstanceName
+        self.appInstanceDescription = appInstanceDescription
+        self.vimConnectionInfo = vimConnectionInfo
+        self.nsInstanceId = nsInstanceId
+        self.vnfInstaneId = vnfInstaneId
+        self.instantiationState = instantiationState
+        self.instantiationAppState = instantiationAppState
+        self.communicationInterface = communicationInterface
+        self._links = _links
+
 
 
 ############################ Host and Platform info ##################################################
 
 class MECHostInformation:
-    def __init__(self, hostName: str, hostId: str) -> None:
+    """
+        This data type represents the information of a MEC host.
+
+        Section 6.2.2.17 of MEC 010-2
+    """
+    def __init__(self, hostName: str, hostId: dict) -> None:
+        """
+            :param hostName: Name of the MEC host.
+            :param hostId: Deployment-specific information to identify a MEC host. See note.
+
+            Note: This information can be structured to cater for host identification schemes that are more complex than a simple identifier, e.g. when referring to the structure of an NFVI.
+        """
         self.hostName = hostName
         self.hostId = hostId
 
@@ -2090,6 +2157,481 @@ class MECHostInformation:
                 hostId=self.hostId
             )
         )
+
+# TODO: Complete this
+class RequestedAdditionalCapabilityData:
+    """
+    This data type describes requested additional capability for a particular VDU. Such a capability may be for acceleration or specific tasks
+
+    Section 7.1.9.5.2 of ETSI GS NFV-IFA 011
+    """
+    def __init__(
+        self,
+        requestedAdditionalCapabilityName: str,
+        supportMandatory: bool,
+        minRequestedAdditionalCapabilityVersion: str,
+        preferredRequestedAdditionalCapabilityVersion: str,
+        targetPerformanceParameters: dict
+    ):
+        self.requestedAdditionalCapabilityName = requestedAdditionalCapabilityName
+        self.supportMandatory = supportMandatory
+        self.minRequestedAdditionalCapabilityVersion = minRequestedAdditionalCapabilityVersion
+        self.preferredRequestedAdditionalCapabilityVersion = preferredRequestedAdditionalCapabilityVersion
+        self.targetPerformanceParameters = targetPerformanceParameters
+
+
+# TODO: Complete this
+class LogicalNodeRequirements:
+    """
+    This data type represents compute, memory and I/O requirements that are to be associated with the logical node of infrastructure.
+
+    Section 7.1.9.6 of ETSI GS NFV-IFA 011
+    """
+    def __init__(
+        self,
+        id: str,
+        logicalNodeRequirementDetail: dict, # The logical node-level compute, memory and I/O requirements. An array of key-value pairs that articulate the deployment requirements.
+        ):
+        self.id = id
+        self.logicalNodeRequirementDetail = logicalNodeRequirementDetail
+
+
+# TODO: Complete this
+class BlockStorageData:
+    """
+    This data type represents the details of block storage resource..
+
+    Section 7.1.9.4.3 of ETSI GS NFV-IFA 011
+    """
+    def __init__(
+        self,
+        sizeOfStorage: int,
+        vduStorageRequirements: dict = None,
+        rdmaEnabled: bool = None,
+        swImageDesc: str = None,
+        ):
+        self.sizeOfStorage = sizeOfStorage
+        self.vduStorageRequirements = vduStorageRequirements
+        self.rdmaEnabled = rdmaEnabled
+        self.swImageDesc = swImageDesc
+        
+
+# TODO: Complete this
+class VirtualCpuPinningData:
+    """
+    This data type supports the specification of requirements related to the virtual CPU pinning configuration of a virtual compute resource.
+
+    Section 7.1.9.2.4 of ETSI GS NFV-IFA 011
+    """
+    def __init__(
+        self,
+        virtualCpuPinningPolicy: CpuPinningPolicy = None,
+        virtualCpuPinningRule: List(str) = None
+        ):
+        self.virtualCpuPinningPolicy = virtualCpuPinningPolicy
+        self.virtualCpuPinningRule = virtualCpuPinningRule
+
+
+# TODO: Complete this
+class VirtualCpuData:
+    """
+    This data type supports the specification of requirements related to virtual CPU(s) of a virtual compute resource.
+
+    Section 7.1.9.2.3 of ETSI GS NFV-IFA 011
+    """
+    def __init__(
+        self,
+        numVirtualCpu: int,
+        cpuArchitecture: str = None,
+        virtualCpuClock: int = None,
+        virtualCpuOversubscriptionPolicy: int = None,
+        vduCpuRequirements: dict = None,
+        virtualCpuPinning: VirtualCpuPinningData = None,
+        ):
+        self.cpuArchitecture = cpuArchitecture
+        self.numVirtualCpu = numVirtualCpu
+        self.virtualCpuClock = virtualCpuClock
+        self.virtualCpuOversubscriptionPolicy = virtualCpuOversubscriptionPolicy
+        self.vduCpuRequirements = vduCpuRequirements
+        self.virtualCpuPinning = virtualCpuPinning
+
+
+# TODO: Complete this
+class VirtualMemoryData:
+    """
+    This data type supports the specification of requirements related to virtual memory of a virtual compute resource.
+
+    Section 7.1.9.3.2 of ETSI GS NFV-IFA 011
+    """
+    def __init__(
+        self,
+        virtualMemSize: int,
+        virtualMemOversubscriptionPolicy: int = None,
+        vduMemRequirements: dict = None,
+        numaEnabled: bool = None,
+        ):       
+        self.virtualMemSize = virtualMemSize
+        self.virtualMemOversubscriptionPolicy = virtualMemOversubscriptionPolicy
+        self.vduMemRequirements = vduMemRequirements
+        self.numaEnabled = numaEnabled
+
+
+# TODO: Complete this
+class VirtualComputeDescriptor:
+    """
+    This data type represents the virtualised compute resource requirements of an application instance.
+
+    Section 7.1.9.2.2 of ETSI GS NFV-IFA 011
+    """
+    def __init__(
+        self,
+        virtualComputeDescId: str,
+        virtualMemory: VirtualMemoryData,
+        virtualCpu: VirtualCpuData,
+        virtualDisk: List(BlockStorageData),    
+        logicalNode: List(LogicalNodeRequirements) = None,
+        requestAdditionalCapabilities: List(RequestedAdditionalCapabilityData) = None,
+        computeRequirements: List(str) = None, #Not specified in the spec
+        ):
+        self.virtualComputeDescId = virtualComputeDescId
+        self.virtualMemory = virtualMemory
+        self.virtualCpu = virtualCpu
+        self.virtualDisk = virtualDisk
+        self.logicalNode = logicalNode
+        self.requestAdditionalCapabilities = requestAdditionalCapabilities
+        self.computeRequirements = computeRequirements
+
+
+# TODO: Complete this
+class ObjectStorageData:
+    """
+    This data type represents the details of object storage resource.
+
+    Section 7.1.9.4.4 of ETSI GS NFV-IFA 011
+    """
+    def __init__(
+        self,
+        maxSizeOfStorage: int = None,
+        ):
+        """
+        :param maxSizeOfStorage: Max size of virtualised storage resource in GB.
+        """
+        self.maxSizeOfStorage = maxSizeOfStorage
+
+
+# TODO: Complete this
+class FileStorageData:
+    """
+    This data type represents the details of file storage resource.
+
+    Section 7.1.9.4.5 of ETSI GS NFV-IFA 011
+    """
+    def __init__(
+        self,
+        sizeOfStorage: int,
+        fileSystemProtocol: str,
+        intVirtualLinkDesc: str,
+        ):
+        """
+        :param sizeOfStorage: Size of virtualised storage resource in GB.
+        :param fileSystemProtocol: Shared file system protocol (e.g. NFS, CIFS).
+        :param intVirtualLinkDesc: Reference of the internal VLD which this file storage connects to. The attached VDUs shall connect to the same internal VLD.
+        """
+        self.sizeOfStorage = sizeOfStorage
+        self.fileSystemProtocol = fileSystemProtocol
+        self.intVirtualLinkDesc = intVirtualLinkDesc
+
+
+# TODO: Complete this
+class MaxNumberOfImpactedInstances:
+    """
+    This data type represents the maximum number of instances of a given VDU or 
+    VnfVirtualLinkDesc that may be impacted simultaneously without impacting the 
+    functionality of the group of a given size.
+
+    Section 7.1.8.18 of ETSI GS NFV-IFA 011
+    """
+    def __init__(
+        self,
+        maxNumberOfImpactedInstances: int,
+        groupSize: int = None,
+    ):
+        self.maxNumberOfImpactedInstances = maxNumberOfImpactedInstances
+        self.groupSize = groupSize
+
+
+
+# TODO: Complete this
+class NfviMaintenanceInfo:
+    """
+    This data type represents the information related to the constraints and 
+    rules applicable to virtualised resources and their groups impacted due to 
+    NFVI maintenance operations.
+
+    Section 7.1.8.17 of ETSI GS NFV-IFA 011
+    """
+    def __init__(
+        self,
+        impactNotificationLeadTime: int,
+        isImpactMitigationRequested: bool = None,
+        supportedMigrationType: List(SupportedMigrationType) = None,
+        maxUndetectableInterruptionTime: int = None,
+        minRecoveryTimeBetweenImpacts: int = None,
+        maxNumberOfImpactedInstances: List(MaxNumberOfImpactedInstances) = None,
+        ):
+        self.impactNotificationLeadTime = impactNotificationLeadTime
+        self.isImpactMitigationRequested = isImpactMitigationRequested
+        self.supportedMigrationType = supportedMigrationType
+        self.maxUndetectableInterruptionTime = maxUndetectableInterruptionTime
+        self.minRecoveryTimeBetweenImpacts = minRecoveryTimeBetweenImpacts
+        self.maxNumberOfImpactedInstances = maxNumberOfImpactedInstances
+
+
+# TODO: Complete this
+class VirtualStorageDescriptor:
+    """
+    This data type represents the the specifications of requirements related to persistent virtual storage resources.
+
+    Section 6.2.1.5 of ETSI GS MEC 010-2
+    Section 7.1.9.4.2 of ETSI GS NFV-IFA 011
+    """
+    def __init__(
+        self,
+        id: str,
+        typeOfStorage: TypeOfStorage,
+        blockStorageData: BlockStorageData = None,
+        objectStorageData: ObjectStorageData = None,
+        fileStorageData: FileStorageData = None,
+        nfviMaintenanceInfo: NfviMaintenanceInfo = None,
+        perVnfcInstance: bool = None,
+    ):
+        self.id = id
+        self.typeOfStorage = typeOfStorage
+        self.blockStorageData = blockStorageData
+        self.objectStorageData = objectStorageData
+        self.fileStorageData = fileStorageData
+        self.nfviMaintenanceInfo = nfviMaintenanceInfo
+        self.perVnfcInstance = perVnfcInstance
+
+
+# TODO: Complete this
+class LocationConstraints:
+    """
+    This data type represents the specification of MEC application requirements 
+    related to MEC application deployment location constraints.
+
+    Section 6.2.2.2 of ETSI GS MEC 010-2
+    """
+    def __init__(
+        self,
+        countryCode: str = None,
+        civicAddressElement: List(CivicAddressElement) = None,
+        area: dict = None,
+    ):
+        self.countryCode = countryCode
+        self.civicAddressElement = civicAddressElement
+        self.area = area
+
+
+class VimConnectionInfo:
+    """
+    This data type represents the information of the VIM connection.
+
+    Section 6.2.2.18 of ETSI GS MEC 010-2
+    """
+    def __init__(
+        self,
+        id: str,
+        vimType: str,
+        vimId: str = None,
+        interfaceInfo: dict = None,
+        accessInfo: dict = None,
+        extra: dict = None,
+        ):
+        """
+        :param vimId: Identifier of the VIM.
+        :param vimType: Type of the VIM. See note 1.
+        :param accessInfo: Access information of the VIM. See note 2.
+        """
+        self.id = id
+        self.vimType = vimType
+        self.vimId = vimId
+        self.interfaceInfo = interfaceInfo
+        self.accessInfo = accessInfo
+        self.extra = extra
+
+
+# TODO: Complete this
+class AppTermCandsForCoord:
+    """
+    This data type represents the parameters to provide candidates of 
+    applications to terminate in pre-emption situations for LCM coordination 
+    exchanges.
+
+    Section 6.2.2.23 of ETSI GS MEC 010-2
+    """
+    def __init__(
+        self,
+        terminationOptions: List(str)
+    ):
+        """
+        terminationOptions [array(Structure(inline))]
+            > appInstIdTerminationCands [array(String)]
+
+        :param terminationOptions: Sets of application options for the MEO/MEAO 
+        to select from as candidates for termination. The MEO/MEAO shall select 
+        one or more of these alternate options to pass to the OSS when utilizing 
+        the LCM coordination exchange in pre-emption situations. For each option, 
+        the MEO/MEAO may select all, or a subset, of the candidate set's members.
+        """
+        self.terminationOptions = terminationOptions
+
+
+# TODO: Complete this
+class InstantiateAppRequest:
+    """
+    This data type represents request parameters of the "Instantiate Application" operation. It shall comply with the
+    provisions in clause 6.2.2.7.2, which aligns with the clause 6.3.1.3.
+
+    Section 6.2.2.7 Type: InstantiateAppRequest - MEC 010-2
+    """
+    def __init__(
+        self,
+        selectedMECHostInfo: List(MECHostInformation),
+        virtualComputeDescriptor: VirtualComputeDescriptor = None,
+        virtualStorageDescriptor: List(VirtualStorageDescriptor) = None,
+        locationConstraints: LocationConstraints = None,
+        vimConnectionInfo: List(VimConnectionInfo) = None,
+        appTermCandsForCoord: AppTermCandsForCoord = None,
+        ):
+        """
+        :param selectedMECHostInfo: Information of selected host for the application instance. See note 2.
+        :param virtualComputeDescriptor: CPU and memory requirements, as well as optional additional requirements, such as disk and acceleration related capabilities, of the virtualisation container used to realize the application instance to be created. See note 1.
+        :param virtualStorageDescriptor: Defines descriptors of virtual storage resources to be used by the application instance to be created. See note 1.
+        :param locationConstraints: Defines the location constraints for the application instance to be created. See note 3.
+        :param vimConnectionInfo: 
+        :param appTermCandsForCoord:
+        
+        NOTE 1: This attribute may be provided in the InstantiateAppRequest structure to override the same attribute in the AppD.
+        NOTE 2: This field applies to Mm3 reference point only.
+        NOTE 3: This field applies to Mm1 reference point only.
+        """
+        pass
+    def from_json(data:dict) -> InstantiateAppRequest:
+        return InstantiateAppRequest()
+    def to_json(self):
+        pass
+
+
+# TODO: Complete
+class ParamsForVdu:
+    def __init__(self, vdu_id: str, additionalParams: dict = None):
+        self.vdu_id = vdu_id
+        self.additionalParams = additionalParams
+
+
+# TODO: Complete
+class ParamsForKdu:
+    def __init__(
+        self, kdu_name: str, 
+        k8s_namespace: str = None,
+        kdu_model: str = None,
+        additionalParams: dict = None,
+    ):
+        self.kdu_name = kdu_name
+        self.k8s_namespace = k8s_namespace
+        self.kdu_model = kdu_model
+        self.additionalParams = additionalParams
+
+
+# TODO: Complete
+class ParamsForVnf:
+    """
+    https://forge.etsi.org/swagger/ui/?url=https%3A%2F%2Fosm.etsi.org%2Fgitweb%2F%3Fp%3Dosm%2FSOL005.git%3Ba%3Dblob_plain%3Bf%3Dosm-openapi.yaml%3Bhb%3DHEAD#/
+    Different from section 6.5.3.22 of ETSI GS NFV-SOL 005 v3.5.1 (2021-10)
+    """
+    def __init__(
+        self,
+        member_vnf_index: str,
+        additionalParams: dict = None,
+        k8s_namespace: str = None,
+        additionalParamsForVdu: List(ParamsForVdu) = None,
+        additionalParamsForKdu: List(ParamsForVdu) = None,
+    ):
+        """
+        :k8s-namespace: use this namespace for all the KDU deployed in this VNF (if any). By default it is used the id of the project.
+        """
+        pass
+
+
+
+# TODO: Complete
+class InstantiateNsRequest:
+    """
+    This data type represents request parameters of the instantiation of a NS instance.
+    https://forge.etsi.org/swagger/ui/?url=https%3A%2F%2Fosm.etsi.org%2Fgitweb%2F%3Fp%3Dosm%2FSOL005.git%3Ba%3Dblob_plain%3Bf%3Dosm-openapi.yaml%3Bhb%3DHEAD#/
+
+    (different from section 6.5.2.11 of ETSI GS NFV-SOL 005 v3.5.1 (2021-10))
+    """
+    class Vnf:
+        def __init__(
+            self,
+            member_vnf_index: str,
+            vimAccountId: str,
+
+        ):
+            self.member_vnf_index = member_vnf_index
+            self.vimAccountId = vimAccountId
+
+    def __init__(
+        self,
+        nsName: str,
+        nsdId: str,
+        vimAccountId: str,
+        lcmOperationType: str = None,
+        nsInstanceId: str = None,
+        netsliceInstanceId: str = None,
+        nsDescription: str = None,
+        wimAccountId: Union[str, bool] = None,
+        additionalParamsForNs: dict = None,
+        additionalParamsForVnf: List(ParamsForVnf) = None,
+        ssh_keys: List[str] = None,
+        nsr_id: str = None,
+        vduImage: str = None,
+        placement_engine: str = None,
+        placement_constraints: dict = None,
+        k8s_namespace: str = None,
+        timeout_ns_deploy: int = None,
+        vnf: List(Vnf) = None,
+    ):
+        """
+        :param nsName: Human-readable name of the NS instance to be created.
+        :param nsdId: Identifier of the NSD that defines the NS instance to be created.
+        :param vimAccountId: Identifier of the VIM Account where the NS instance shall be created.
+        :param placement_engine: To compute automatically the target VIM for each VNF based on constrains, e.g. latency. Currently only 'PLA' is supported.
+        """
+        self.nsName = nsName
+        self.nsdId = nsdId
+        self.vimAccountId = vimAccountId
+        self.lcmOperationType = lcmOperationType
+        self.nsInstanceId = nsInstanceId
+        self.netsliceInstanceId = netsliceInstanceId
+        self.nsDescription = nsDescription
+        self.wimAccountId = wimAccountId
+        self.additionalParamsForNs = additionalParamsForNs
+        self.additionalParamsForVnf = additionalParamsForVnf
+        self.ssh_keys = ssh_keys
+        self.nsr_id = nsr_id
+        self.vduImage = vduImage
+        self.placement_engine = placement_engine
+        self.placement_constraints = placement_constraints
+        self.k8s_namespace = k8s_namespace
+        self.timeout_ns_deploy = timeout_ns_deploy
+        self.vnf = vnf
+
+    def from_json(data: dict) -> InstantiateNsRequest:
+        validate(data, schema=instanceNsRequest_schema)
+        return InstantiateNsRequest(**data)
 
 ############################ EXTRA SERVICES (DNS AND OAUTH) ###########################################
 

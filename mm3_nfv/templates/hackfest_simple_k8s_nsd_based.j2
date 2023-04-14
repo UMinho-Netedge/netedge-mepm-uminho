@@ -1,0 +1,25 @@
+# Based on template from https://osm.etsi.org/gitlab/vnf-onboarding/
+#osm-packages/-/blob/master/hackfest_simple_k8s_ns/hackfest_simple_k8s_nsd.yaml
+---
+nsd:
+    nsd:
+    - description: {{ description }}
+      designer: {{ designer }}
+      df:
+      - id: default-df
+        vnf-profile:
+        - id: vnf
+          virtual-link-connectivity:
+          - constituent-cpd-id:
+            - constituent-base-element-id: vnf
+              constituent-cpd-id: mgmt-ext
+            virtual-link-profile-id: mgmtnet
+          vnfd-id: {{ name }}-vnf
+      id: {{ name }}-ns
+      name: {{ name }}-ns
+      version: 1.0
+      virtual-link-desc:
+      - id: mgmtnet
+        mgmt-network: true
+      vnfd-id:
+      - {{ name }}-vnf

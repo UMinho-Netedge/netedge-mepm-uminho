@@ -100,6 +100,30 @@ def main(database: Type[DatabaseBase]):
         conditions=dict(method=["GET"]),
     )
 
+    mepm_dispatcher.connect(
+        name="Create KNF Descriptor",
+        action="create_vnfd",
+        controller=AppLcmController,
+        route="/app_instances/create_vnfd",
+        conditions=dict(method=["POST"]),
+    )
+
+    mepm_dispatcher.connect(
+        name="Create NS Descriptor",
+        action="create_nsd",
+        controller=AppLcmController,
+        route="/app_instances/create_nsd",
+        conditions=dict(method=["POST"]),
+    )
+
+    mepm_dispatcher.connect(
+        name="Instantiate NS",
+        action="instantiate_ns",
+        controller=AppLcmController,
+        route="/app_instances/instantiate_ns",
+        conditions=dict(method=["POST"]),
+    )
+    
     ############################################################################
 
     cherrypy.config.update(

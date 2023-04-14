@@ -22,20 +22,22 @@ import uuid
 from mm3_nfv.controllers.app_callback_controller import *
 
 from osmclient import client
+from osmclient import common
 from osmclient.common.exceptions import ClientException
 
-import yaml
 import copy
+import yaml
+from jinja2 import Environment, FileSystemLoader
+import subprocess as sp
+import magic
 
 HEADERS = {"Content-Type": "application/json"}
-
-MM5_PORT = cherrypy.config.get("mm5_port")
-MM5_ADDRESS = cherrypy.config.get("mm5_address")
-OSM_SERVER = cherrypy.config.get("osm_server")
-
+    
+#MM5_PORT = cherrypy.config.get("mm5_port")
+#MM5_ADDRESS = cherrypy.config.get("mm5_address")
+#OSM_SERVER = cherrypy.config.get("osm_server")
 
 class AppLcmController:
-
 #######################################################################################
 #                                   LCM OPERATIONS                                    #
 #                        Instantiate, Operate, and Terminate                          #
@@ -47,8 +49,8 @@ class AppLcmController:
             7.4.6 Resource: instantiate application instance task
             Resource URI: {apiRoot}/app_lcm/v1/app_instances/{appInstanceId}/instantiate
             7.4.6.1 Description
-            This resource represents the task of instantiating an application instance. The client can use this resource to instantiate
-            an application instance.
+            This resource represents the task of instantiating an application instance. 
+            The client can use this resource to instantiate an application instance.
         """
         
         cherrypy.log("Received request to instantiate app %s" %appInstanceId)
@@ -69,7 +71,9 @@ class AppLcmController:
 
         try:
             #TO-DO InstantiateAppRequest class
-            instantiateAppRequest = InstantiateAppRequest.from_json(data)
+            #instantiateAppRequest = InstantiateAppRequest.from_json(data)
+            print(data)
+            instantiateNsRequest = InstantiateNsRequest.from_json(data)
         except (TypeError, jsonschema.exceptions.ValidationError) as e:
             error = BadRequest(e)
             return error.message()
@@ -99,10 +103,21 @@ class AppLcmController:
 
         cherrypy.thread_data.db.create("lcmOperations", lcmOperationOccurence)
 
-        # TO-DO process to instantiate the NS
+        # TODO process to instantiate the NS
         # hostname = "192.168.86.216"
         # myclient = client.Client(host=hostname, sol005=True)
         # createNS = myclient.ns.create(nsd, nsName, accountNS)
+        osm_server = cherrypy.config.get("osm_server")
+        osmclient = client.Client(host=osm_server, sol005=True)
+
+        resp = osmclient.ns.create(
+            instantiateNsRequest.nsdId,
+            instantiateNsRequest.nsName,
+            instantiateNsRequest.vimAccountId,
+            )
+
+        print("OSM RESP: ", resp)
+        print("type: ", type(resp))
         # TODO: errors 401, 403, 404, 406 and 429 
 
         cherrypy.response.status = 202
@@ -330,7 +345,9 @@ class AppLcmController:
             return error.message()
 
         # Send configuration to MEP via Mm5
-        url = "http://%s:%s/mec_platform_mgmt/v1/app_instances/%s/configure_platform_for_app" % (MM5_ADDRESS, MM5_PORT, appInstanceId)
+        mm5_address = cherrypy.config.get("mm5_address")
+        mm5_port = cherrypy.config.get("mm5_port")
+        url = "http://%s:%s/mec_platform_mgmt/v1/app_instances/%s/configure_platform_for_app" % (mm5_address, mm5_port, appInstanceId)
         mm5_response = requests.post(url, headers=HEADERS, data=json.dumps(data_aux))
 
         appState  = AppInstanceState(InstantiationState.INSTANTIATED.value, OperationalState.STARTED.value)
@@ -530,10 +547,150 @@ class AppLcmController:
     @json_out(cls=NestedEncoder)
     def osmclient_tests(self, appInstanceId: str):
         cherrypy.log("Request to test osmclient received")
-        hostname = "192.168.86.210"
-        myclient = client.Client(host=hostname, sol005=True)
-        resp = myclient.nsd.list()
-        print(yaml.safe_dump(resp, indent=4, default_flow_style=False))
+        
+        osm_server = cherrypy.config.get("osm_server")
+        myclient = client.Client(host=osm_server, sol005=True)
+        #resp = myclient.nsd.list()
+        #print(yaml.safe_dump(resp, indent=4, default_flow_style=False))
+
+        #ns package create on OSM
+        pkg = common.package_tool.PackageTool(myclient)
+
+        def create_pkg(
+            package_type,
+            package_name,
+            base_directory = "packages",
+            image = "image-name",
+            vdus = 1,
+            vcpu = 1,
+            memory = 1024,
+            storage = 10,
+            interfaces = 0,
+            vendor = "OSM",
+            override = False,
+            detailed = False,
+            netslice_subnets = 1,
+            netslice_vlds = 1,
+            old = False,
+        ):
+            return pkg.create(
+                package_type, package_name, base_directory, image, vdus, vcpu, 
+                memory, storage, interfaces, vendor, override, detailed, 
+                netslice_subnets, netslice_vlds, old)
+            
+        print("Creating VNFD package")
+        resp1 = create_pkg("vnf", "vnfd")
+        print(resp1)
+
+
+        print("Creating NSD package")
+        resp2 = create_pkg("ns", "nsd")
+        print(resp2)
+
+        print("Validating, building and onboarding NSD package")
+        #resp = myclient.vnf.create(resp2)
+
+        #TODO: Create NSD on OSM
+        # nsr_name <=> ns_name && account <=> vim account
+        resp = myclient.ns.create(nsd_name="nsd", nsr_name="insomnia", account='e1d59009-8237-4319-a2aa-98f6c02aeaee')
 
         return resp
+    
+    @cherrypy.tools.json_in()
+    @json_out(cls=NestedEncoder)
+    def create_vnfd(self):
+        '''
+        Uses osmclient to create knf packages with the descriptors
+        '''
+        cherrypy.log("Request to create packages received")
+        content = cherrypy.request.json
+
+        # Load templates file from templtes folder
+        path = '/home/netedge/mm3_nfv/'
+        path_yaml = path+'packages/'+content['name']+"_vnfd.yaml"
+        env = Environment(loader = FileSystemLoader(path+'templates/'), trim_blocks=True, lstrip_blocks=True)
+
+        #----------------# KNF Descriptor #----------------#
+        knf_template = env.get_template('hackfest_simple_k8s_vnfd_based.j2')
+        
+        # Create a KNF descriptor by given parameters in a dictionary
+        
+        file=open(path_yaml, "w")
+        file.write(knf_template.render(content))
+
+        # check MIME type of the file
+        mime = magic.Magic(mime=True)
+        print(mime.from_file(path+'packages/'+content['name']+"_vnfd.yaml"))
+
+        #----------------# Onboarding #----------------#
+        osm_server = cherrypy.config.get("osm_server")
+        bashCommand = 'osm --hostname '+osm_server+' vnfd-create '+path_yaml
+
+        if os.access(path_yaml, os.R_OK):
+            print("File is readable.")
+        else:
+            print("File is not readable.")
+
+        try:
+            # https://stackoverflow.com/questions/4256107/running-bash-commands-in-python
+            ob_vnfd = sp.run(bashCommand.split(), shell=False, check=True, text=True)
+            #ob_vnfd_out, ob_vnfd_err = ob_vnfd.communicate()
+            #print(f'\n\nob_vnfd_out: \n{ob_vnfd_out.decode()}\nob_vnfd_err: \n{ob_vnfd_err}')
+            print(f'\n\nob_vnfd_out: \n{ob_vnfd.stdout}\nob_vnfd_err: \n{ob_vnfd.stderr}')
+            resp = ob_vnfd.stdout
+        except sp.CalledProcessError as e:
+            print("Error: ", e.output)
+            resp = str(e.output)
+        
+        #ob_vnfd = sp.Popen(['osm --hostname '+osm_server+' vnfd-create '+path_yaml], stdout=sp.PIPE, shell=True)
+        return resp
+
+
+    @cherrypy.tools.json_in()
+    @json_out(cls=NestedEncoder)
+    def create_nsd(self):
+        '''
+        Uses osmclient to create ns packages with the descriptors
+        '''
+        cherrypy.log("Request to create ns package received")
+        content = cherrypy.request.json
+
+        # Load templates file from templtes folder
+        path = '/home/netedge/mm3_nfv/'
+        env = Environment(loader = FileSystemLoader(path+'templates/'), trim_blocks=True, lstrip_blocks=True)
+
+        #----------------# NS Descriptor #----------------#
+        ns_template = env.get_template('hackfest_simple_k8s_nsd_based.j2')
+
+        # Create a NS descriptor by given parameters in a dictionary
+        file=open(path+'packages/'+content['name']+"_nsd.yaml", "w")
+        file.write(ns_template.render(content))
+
+        # check MIME type of the file
+        mime = magic.Magic(mime=True)
+        print(mime.from_file(path+'packages/'+content['name']+"_nsd.yaml"))
+
+        #----------------# Onboarding #----------------#
+        osm_server = cherrypy.config.get("osm_server")
+        ob_nsd = sp.Popen(['osm --hostname '+osm_server+' nsd-create '+path+'packages/'+content['name']+'_nsd.yaml'], stdout = sp.PIPE, shell=True)
+        ob_nsd_out, ob_nsd_err = ob_nsd.communicate()
+        print(f'\n\nob_nsd_out: \n{ob_nsd_out.decode()}\nob_nsd_err: \n{ob_nsd_err}')
+
+
+    @cherrypy.tools.json_in()
+    @json_out(cls=NestedEncoder)
+    def instantiate_ns(self):
+        cherrypy.log("Request to create ns instance received")
+        content = cherrypy.request.json
+
+        # Instantiate the NS
+        osm_server = cherrypy.config.get("osm_server")
+        myclient = client.Client(host=osm_server, sol005=True)
+        
+        # nsr_name <=> ns_name && account <=> vim account
+        resp = myclient.ns.create(nsd_name=content['name']+'-ns', nsr_name=content['name'], account=content['vim-account'])
+        
+        return resp
+
+
 

@@ -1,0 +1,19 @@
+---
+vnfd:
+    df:
+        - id: default-df
+    ext-cpd:
+        - id: mgmt-ext
+          k8s-cluster-net: mgmtnet
+    id: {{ name }}-vnf
+    k8s-cluster:
+        nets:
+            - id: mgmtnet
+    kdu:
+        - name: {{ name }}
+          helm-chart: {{ helm_chart }}
+    mgmt-cp: mgmt-ext
+    product-name: {{ name }}-vnf
+    provider: Algoritmi-UMinho
+    version: 1.0
+
