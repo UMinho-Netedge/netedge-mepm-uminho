@@ -58,6 +58,7 @@ class IndicationType(Enum):
 
 
 class OperationActionType(Enum):
+    STARTING = "STARTING"
     STOPPING = "STOPPING"
     TERMINATING = "TERMINATING"
 

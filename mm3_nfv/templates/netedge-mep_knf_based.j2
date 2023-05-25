@@ -1,0 +1,19 @@
+vnfd:
+    description: {{ description }}
+    df:
+    - id: default-df
+    ext-cpd:
+    - id: mgmt-ext
+      k8s-cluster-net: mgmtnet
+    id: {{ name }}_knf
+    k8s_cluster:
+        nets:
+        - id: mgmtnet
+    kdu:
+    - name: {{ name }}
+      helm-chart: {{ helm_chart }}
+    mgmt-cp: mgmt-ext
+    product-name: {{ name }}_knf
+    provider: {{ provider }}
+    version: {{ version }}
+

@@ -23,13 +23,15 @@ from mm3_nfv.controllers.app_callback_controller import *
 
 from osmclient import client
 from osmclient import common
-from osmclient.common.exceptions import ClientException
+from osmclient.common.exceptions import ClientException, OsmHttpException
+from osmclient.common.exceptions import NotFound as OsmNotFound
 
 import copy
 import yaml
 from jinja2 import Environment, FileSystemLoader
 import subprocess as sp
 import magic
+import re
 
 HEADERS = {"Content-Type": "application/json"}
     
@@ -55,37 +57,78 @@ class AppLcmController:
         
         cherrypy.log("Received request to instantiate app %s" %appInstanceId)
 
+        """
+        # CREDENTIALS
+        try:
+            oauth = cherrypy.config.get("oauth_server")
+            credentials = oauth.register()
+            token = oauth.get_token(credentials["client_id"], credentials["client_secret"])
+            credentials["access_token"] = token
+            secret = dict(access_token=base64.b64encode(token.encode('ascii')).decode('ascii'))
+        except:
+            error_msg = "OAuth server is not available, please try again in a few minutes."
+            error = Unauthorized(error_msg)
+            return error.message()
+         """
+
         appStatus = cherrypy.thread_data.db.query_col(
             "appStatus",
             query=dict(appInstanceId=appInstanceId),
             find_one=True,
         )
 
-        # If app exists in db return error
-        if appStatus is not None and appStatus.state.instantiationState == InstantiationState.INSTANTIATED:
-            error_msg = "Application %s is already instantiated." % (appInstanceId)
-            error = Conflict(error_msg)
-            return error.message()
+        # If app exists and is not in NOT_INSTANTIATED state or READY, return error
+        # MUST CHECK IF instance already exists and if it is in NOT_INSTANTIATED state, if it is the case update state
+        # assuming the app does not exist in appStatus:
+        if appStatus is not None:
+            if appStatus['state']['instantiationState'] != InstantiationState.NOT_INSTANTIATED.value:
+                error_msg = "Application %s is already instantiated." % (appInstanceId)
+                error = Conflict(error_msg)
+                return error.message()
+            
+            elif appStatus['indication'] != IndicationType.READY.value:
+                error_msg = "Application %s is not ready to be instantiated." % (appInstanceId)
+                error = Forbidden(error_msg)
+                return error.message()
+            
 
         data = cherrypy.request.json
 
         try:
-            #TO-DO InstantiateAppRequest class
-            #instantiateAppRequest = InstantiateAppRequest.from_json(data)
-            print(data)
             instantiateNsRequest = InstantiateNsRequest.from_json(data)
+            #InstantiateAppRequest class
+            #instantiateAppRequest = InstantiateAppRequest.from_json(data)
+
         except (TypeError, jsonschema.exceptions.ValidationError) as e:
             error = BadRequest(e)
             return error.message()
 
+        # Process to instantiate the NS
+        osm_server = cherrypy.config.get("osm_server")
+        osmclient = client.Client(host=osm_server, sol005=True)
+        
+        try:
+            # nsr_name <=> ns_name && account <=> vim account
+            ns_id = osmclient.ns.create(nsd_name=data['nsdId'], nsr_name=data['nsName'], account=data['vimAccountId'])
 
-        # MUST CHECK IF instance already exists and if it is in NOT_INSTANTIATED state, if it is the case update state
-        # assuming the app does not exist in appStatus:
+        except ClientException as e:
+            # Handle ClientException errors here
+            print("ClientException:", str(e))
+            print(f"class {e.__class__}")
+        
+            # <class 'osmclient.common.exceptions.NotFound'>
+            error = NotFound(str(e))
+            return error.message()
+
+
+        # TODO:  errors 406 and 429
+
         appState  = AppInstanceState(InstantiationState.INSTANTIATED.value, OperationalState.STARTED.value)
         appStatusDict = dict(
-            appInstanceId=appInstanceId,
+            appInstanceId = appInstanceId,
             state = appState.to_json(),
-            indication="STARTING"
+            indication = "STARTING",
+            nsInstanceId = ns_id,
         )
 
         cherrypy.thread_data.db.create("appStatus", appStatusDict)
@@ -102,23 +145,6 @@ class AppLcmController:
         )
 
         cherrypy.thread_data.db.create("lcmOperations", lcmOperationOccurence)
-
-        # TODO process to instantiate the NS
-        # hostname = "192.168.86.216"
-        # myclient = client.Client(host=hostname, sol005=True)
-        # createNS = myclient.ns.create(nsd, nsName, accountNS)
-        osm_server = cherrypy.config.get("osm_server")
-        osmclient = client.Client(host=osm_server, sol005=True)
-
-        resp = osmclient.ns.create(
-            instantiateNsRequest.nsdId,
-            instantiateNsRequest.nsName,
-            instantiateNsRequest.vimAccountId,
-            )
-
-        print("OSM RESP: ", resp)
-        print("type: ", type(resp))
-        # TODO: errors 401, 403, 404, 406 and 429 
 
         cherrypy.response.status = 202
         return dict(lifecycleOperationOccurrenceId=lifecycleOperationOccurrenceId)
@@ -143,7 +169,7 @@ class AppLcmController:
         )
 
         # If app exists in db
-        if appStatus is None or appStatus.state.instantiationState == InstantiationState.NOT_INSTANTIATED:
+        if appStatus is None or appStatus['state']['instantiationState'] == InstantiationState.NOT_INSTANTIATED:
             error_msg = "Application %s not instantiated." % (appInstanceId)
             error = Conflict(error_msg)
             return error.message()
@@ -153,8 +179,7 @@ class AppLcmController:
         # for filtering after saving to the database
         try:
             # Verify the requestion body if its correct about its schema:
-            updateState = OperateAppRequest.from_json(data)
-
+            updateState = OperateAppRequest.from_json(copy.deepcopy(data))
         except (TypeError, jsonschema.exceptions.ValidationError) as e:
             error = BadRequest(e)
             return error.message()
@@ -168,16 +193,46 @@ class AppLcmController:
 
 
         if updateState.changeStateTo.value == ChangeStateTo.STOPPED.value:
-            operationAction = OperationActionType.STOPPING
-
-
-        appState  = AppInstanceState(InstantiationState.INSTANTIATED, OperationalState.STOPPED)
+            operationAction = OperationActionType.STOPPING.name
+            appState  = AppInstanceState(InstantiationState.INSTANTIATED.value, OperationalState.STOPPED.value)
+        elif updateState.changeStateTo.value == ChangeStateTo.STARTED.value:
+            operationAction = OperationActionType.STARTING.name
+            appState  = AppInstanceState(InstantiationState.INSTANTIATED.value, OperationalState.STARTED.value)
 
         appInstanceDict = dict(appInstanceId=appInstanceId)
         appStatusDict = dict(
             indication=updateState.changeStateTo.name,
             state=appState.to_json()
         )
+
+
+        # Send to MEP via Mm5
+        # TODO: catch errors from mep
+        mm5_address = cherrypy.config.get("mm5_address")
+        mm5_port = cherrypy.config.get("mm5_port")
+        
+        print("DATA: ", data)
+        url = "http://%s:%s/mec_platform_mgmt/v1/app_instances/%s/operate" % (mm5_address, mm5_port, appInstanceId)
+        mm5_response = requests.post(url, headers=HEADERS, data=json.dumps(data))
+        print("Mm5 response: ", mm5_response.status_code)
+        #print("Mm5 response json: ", mm5_response.json())
+        
+        code = mm5_response.status_code
+        if code == 400:
+            detail = mm5_response.json()['detail']
+            error = BadRequest(detail)
+            return error.message()
+        elif code == 409:
+            detail = mm5_response.json()['detail']
+            error = Conflict(detail)
+            return error.message()
+        elif code != 200:
+            detail = mm5_response.json()['detail']
+            error = Error(detail)
+            return error.message()
+
+
+
         cherrypy.thread_data.db.update(
             "appStatus", 
             appInstanceDict, 
@@ -198,7 +253,7 @@ class AppLcmController:
         cherrypy.thread_data.db.create("lcmOperations", lcmOperationOccurence)
 
         # Send operate app message to MEP
-        # check if there is a way to stop an NS on osmclient
+        # check if there is a way to stop an NS on osmclient => apenas é possível criar e apagar
        
         return dict(lifecycleOperationOccurrenceId=lifecycleOperationOccurrenceId)
 
@@ -242,8 +297,10 @@ class AppLcmController:
             error = BadRequest(error_msg)
             return error.message()
 
-        # Send configuration to MEP via Mm5
-        url = "http://%s:%s/mec_platform_mgmt/v1/app_instances/%s/terminate" % (MM5_ADDRESS, MM5_PORT, appInstanceId)
+        # Send to MEP via Mm5
+        mm5_address = cherrypy.config.get("mm5_address")
+        mm5_port = cherrypy.config.get("mm5_port")
+        url = "http://%s:%s/mec_platform_mgmt/v1/app_instances/%s/terminate" % (mm5_address, mm5_port, appInstanceId)
         mm5_response = requests.post(url, headers=HEADERS, data=json.dumps(data))
 
         appInstanceDict = dict(appInstanceId=appInstanceId)
@@ -292,11 +349,23 @@ class AppLcmController:
             # TO-DO Check the MEP that controls the appInstanceId
             # send a terminate request to MEP (remove configuration)
             # proceed to NS removal
-            # hostname = "192.168.86.216"
-            # myclient = client.Client(host=hostname, sol005=True)
-            # createNS = myclient.ns.delete(nsName)
-            # set application instantiationState to "NOT_INSTANTIATED"
-            # TO-DO errors 401, 403, 404, 406 and 429
+            # TODO: set application instantiationState to "NOT_INSTANTIATED"
+            # TODO: errors 401, 403, 404, 406 and 429
+            osm_server = cherrypy.config.get("osm_server")
+            osmclient = client.Client(host=osm_server, sol005=True)
+        
+            try:
+                resp = osmclient.ns.delete(appStatus['nsInstanceId'])
+
+            except ClientException as e:
+                # Handle ClientException errors here
+                print("ClientException:", str(e))
+                print(f"class {e.__class__}")
+            
+                # <class 'osmclient.common.exceptions.NotFound'>
+                error = NotFound(str(e))
+                return error.message()
+        
 
             # Remove App Instance from appStatus
             appInstanceDict = dict(appInstanceId=appInstanceId)
@@ -329,9 +398,20 @@ class AppLcmController:
             find_one=True,
         )
 
-        # If app exists in db return error
-        if appStatus is not None:
+        if appStatus is None:
+            error_msg = "Application %s is not instantiated." % (appInstanceId)
+            error = Conflict(error_msg)
+            return error.message()
+
+
+        # check if is already configured: if yes return error
+        if ("configured" in appStatus) and (appStatus['configured'] == True):
             error_msg = "Application %s already configured." % (appInstanceId)
+            error = Conflict(error_msg)
+            return error.message()
+        # check if appInstance is in INSTANTIATED state: if not return error
+        elif appStatus['state']['instantiationState'] != "INSTANTIATED":
+            error_msg = "Application %s is not in INSTANTIATED state." % (appInstanceId)
             error = Conflict(error_msg)
             return error.message()
 
@@ -354,10 +434,11 @@ class AppLcmController:
         appStatusDict = dict(
             appInstanceId=appInstanceId,
             state = appState.to_json(),
-            indication="STARTING"
+            indication="STARTING",
+            configured = True
         )
 
-        cherrypy.thread_data.db.create("appStatus", appStatusDict)
+        cherrypy.thread_data.db.update("appStatus", dict(appInstanceId=appInstanceId), appStatusDict)
 
         lifecycleOperationOccurrenceId = str(uuid.uuid4())
         lastModified = cherrypy.response.headers['Date']
@@ -392,8 +473,6 @@ class AppLcmController:
             cherrypy.response.status = 201
 
         return dict(lifecycleOperationOccurrenceId=lifecycleOperationOccurrenceId)
-
-
 
 
     @cherrypy.tools.json_in()
@@ -543,6 +622,213 @@ class AppLcmController:
             return error.message()
         return result
 
+    
+    @cherrypy.tools.json_in()
+    @json_out(cls=NestedEncoder)
+    def create_vnfd(self):
+        '''
+        Uses osmclient to create knf packages with the descriptors
+        '''
+        cherrypy.log("Request to create packages received")
+        content = cherrypy.request.json
+
+        # Load templates file from templates folder
+        path = '/home/netedge/mm3_nfv/'
+        path_yaml = path+'packages/'+content['name']+"_vnfd.yaml"
+
+        
+        #----------------# KNF Descriptor #----------------#
+        env = Environment(loader = FileSystemLoader(path+'templates/'), trim_blocks=True, lstrip_blocks=True)
+        knf_template = env.get_template('netedge-mep_knf_based.j2')
+        
+        # Create a KNF descriptor by given parameters in a dictionary
+        with open(path_yaml, "w") as f:
+            output = f.write(knf_template.render(content))
+        
+        """ 
+        # check MIME type of the file
+        mime = magic.Magic(mime=True)
+        print(mime.from_file(path+'packages/'+content['name']+"_vnfd.yaml"))
+        """
+
+        #----------------# Onboarding #----------------#
+        osm_server = cherrypy.config.get("osm_server")
+        bashCommand = 'osm --hostname '+osm_server+' vnfd-create '+path_yaml
+
+        try:
+            # https://stackoverflow.com/questions/4256107/running-bash-commands-in-python
+            ob_vnfd = sp.run(
+                bashCommand.split(),
+                check=True, 
+                capture_output=True
+                )
+            
+            resp = ob_vnfd.stdout.decode().strip()
+
+        except sp.CalledProcessError as e:
+            #print("Error: ", e.output)
+            #print('return code ', e.returncode)
+            #print('stderr ', e.stderr)
+
+            # Processing error message from osmclient
+            match = re.match(r'.*?(\{.*\}).*', e.output.decode(), re.DOTALL)
+    
+            if match:
+                error = json.loads(match.group(1))
+                if error['status'] == 409:
+                    error_msg = error['detail']
+                    error = Conflict(error_msg)
+                    return error.message()
+            else:
+                return e.output.decode()
+        
+        return resp
+    
+
+    @cherrypy.tools.json_in()
+    @json_out(cls=NestedEncoder)
+    def create_vnfd_file(self):
+        '''
+        Uses osmclient to create knfs with the descriptors
+        '''
+        cherrypy.log("Request to create VNF descriptor received")
+        content = cherrypy.request.json
+
+        path = '/home/netedge/mm3_nfv/'
+        path_yaml = path+'packages/'+content['file_name']
+
+        #----------------# Onboarding #----------------#
+        osm_server = cherrypy.config.get("osm_server")
+        bashCommand = 'osm --hostname '+osm_server+' vnfd-create '+path_yaml
+
+        try:
+            ob_vnfd = sp.run(
+                bashCommand.split(),  
+                check=True,  
+                capture_output=True)
+           
+            resp = ob_vnfd.stdout.decode().strip()
+
+        except sp.CalledProcessError as e:
+            match = re.match(r'.*?(\{.*\}).*', e.output.decode(), re.DOTALL)
+            if match:
+                error = json.loads(match.group(1))
+                if error['status'] == 409:
+                    error_msg = error['detail']
+                    error = Conflict(error_msg)
+                    return error.message()
+            else:
+                return e.output.decode()
+
+        return resp
+        
+
+    @cherrypy.tools.json_in()
+    @json_out(cls=NestedEncoder)
+    def create_nsd(self):
+        '''
+        Uses osmclient to create NSs with the descriptors
+        '''
+        cherrypy.log("Request to create NS descriptor received")
+        content = cherrypy.request.json
+
+        # Load templates file from templtes folder
+        path = '/home/netedge/mm3_nfv/'
+        path_yaml = path+'packages/'+content['name']+"_nsd.yaml"
+
+        #----------------# NS Descriptor #----------------#
+        env = Environment(loader = FileSystemLoader(path+'templates/'), trim_blocks=True, lstrip_blocks=True)
+        ns_template = env.get_template('netedge-mep_ns_based.j2')
+
+        # Create a NS descriptor by given parameters in a dictionary
+        with open(path_yaml, "w") as f:
+            f.write(ns_template.render(content))
+
+        #----------------# Onboarding #----------------#
+        osm_server = cherrypy.config.get("osm_server")
+        bashCommand = 'osm --hostname ' + osm_server + ' nsd-create ' + path_yaml
+
+        try:
+            ob_nsd = sp.run(
+                bashCommand.split(), 
+                check=True,
+                capture_output=True
+                )
+            resp = ob_nsd.stdout.decode().strip()
+
+        except sp.CalledProcessError as e:
+            match = re.match(r'.*?(\{.*\}).*', e.output.decode(), re.DOTALL)
+    
+            if match:
+                error = json.loads(match.group(1))
+                if error['status'] == 409:
+                    error_msg = error['detail']
+                    error = Conflict(error_msg)
+                    return error.message()
+            else:
+                return e.output.decode()
+        
+        return resp
+
+
+    @cherrypy.tools.json_in()
+    @json_out(cls=NestedEncoder)
+    def create_nsd_file(self):
+        '''
+        Uses osmclient to create NSs with the descriptors
+        '''
+        cherrypy.log("Request to create NS descriptor received")
+        content = cherrypy.request.json
+
+        path = '/home/netedge/mm3_nfv/'
+        path_yaml = path+'packages/'+content['file_name']
+
+        #----------------# Onboarding #----------------#
+        osm_server = cherrypy.config.get("osm_server")
+        bashCommand = 'osm --hostname ' + osm_server + ' nsd-create ' + path_yaml
+
+        try:
+            ob_nsd = sp.run(
+                bashCommand.split(), 
+                check=True,
+                capture_output=True
+                )
+            resp = ob_nsd.stdout.decode().strip()
+
+        except sp.CalledProcessError as e:
+            match = re.match(r'.*?(\{.*\}).*', e.output.decode(), re.DOTALL)
+    
+            if match:
+                error = json.loads(match.group(1))
+                if error['status'] == 409:
+                    error_msg = error['detail']
+                    error = Conflict(error_msg)
+                    return error.message()
+            else:
+                return e.output.decode()
+        
+        return resp
+    
+
+
+################################################################################
+
+    @cherrypy.tools.json_in()
+    @json_out(cls=NestedEncoder)
+    def instantiate_ns(self):
+        cherrypy.log("Request to create ns instance received")
+        content = cherrypy.request.json
+
+        # Instantiate the NS
+        osm_server = cherrypy.config.get("osm_server")
+        myclient = client.Client(host=osm_server, sol005=True)
+        
+        # nsr_name <=> ns_name && account <=> vim account
+        resp = myclient.ns.create(nsd_name=content['name']+'-ns', nsr_name=content['name'], account=content['vim-account'])
+        
+        return resp
+    
+
 
     @json_out(cls=NestedEncoder)
     def osmclient_tests(self, appInstanceId: str):
@@ -594,102 +880,6 @@ class AppLcmController:
         # nsr_name <=> ns_name && account <=> vim account
         resp = myclient.ns.create(nsd_name="nsd", nsr_name="insomnia", account='e1d59009-8237-4319-a2aa-98f6c02aeaee')
 
-        return resp
-    
-    @cherrypy.tools.json_in()
-    @json_out(cls=NestedEncoder)
-    def create_vnfd(self):
-        '''
-        Uses osmclient to create knf packages with the descriptors
-        '''
-        cherrypy.log("Request to create packages received")
-        content = cherrypy.request.json
-
-        # Load templates file from templtes folder
-        path = '/home/netedge/mm3_nfv/'
-        path_yaml = path+'packages/'+content['name']+"_vnfd.yaml"
-        env = Environment(loader = FileSystemLoader(path+'templates/'), trim_blocks=True, lstrip_blocks=True)
-
-        #----------------# KNF Descriptor #----------------#
-        knf_template = env.get_template('hackfest_simple_k8s_vnfd_based.j2')
-        
-        # Create a KNF descriptor by given parameters in a dictionary
-        
-        file=open(path_yaml, "w")
-        file.write(knf_template.render(content))
-
-        # check MIME type of the file
-        mime = magic.Magic(mime=True)
-        print(mime.from_file(path+'packages/'+content['name']+"_vnfd.yaml"))
-
-        #----------------# Onboarding #----------------#
-        osm_server = cherrypy.config.get("osm_server")
-        bashCommand = 'osm --hostname '+osm_server+' vnfd-create '+path_yaml
-
-        if os.access(path_yaml, os.R_OK):
-            print("File is readable.")
-        else:
-            print("File is not readable.")
-
-        try:
-            # https://stackoverflow.com/questions/4256107/running-bash-commands-in-python
-            ob_vnfd = sp.run(bashCommand.split(), shell=False, check=True, text=True)
-            #ob_vnfd_out, ob_vnfd_err = ob_vnfd.communicate()
-            #print(f'\n\nob_vnfd_out: \n{ob_vnfd_out.decode()}\nob_vnfd_err: \n{ob_vnfd_err}')
-            print(f'\n\nob_vnfd_out: \n{ob_vnfd.stdout}\nob_vnfd_err: \n{ob_vnfd.stderr}')
-            resp = ob_vnfd.stdout
-        except sp.CalledProcessError as e:
-            print("Error: ", e.output)
-            resp = str(e.output)
-        
-        #ob_vnfd = sp.Popen(['osm --hostname '+osm_server+' vnfd-create '+path_yaml], stdout=sp.PIPE, shell=True)
-        return resp
-
-
-    @cherrypy.tools.json_in()
-    @json_out(cls=NestedEncoder)
-    def create_nsd(self):
-        '''
-        Uses osmclient to create ns packages with the descriptors
-        '''
-        cherrypy.log("Request to create ns package received")
-        content = cherrypy.request.json
-
-        # Load templates file from templtes folder
-        path = '/home/netedge/mm3_nfv/'
-        env = Environment(loader = FileSystemLoader(path+'templates/'), trim_blocks=True, lstrip_blocks=True)
-
-        #----------------# NS Descriptor #----------------#
-        ns_template = env.get_template('hackfest_simple_k8s_nsd_based.j2')
-
-        # Create a NS descriptor by given parameters in a dictionary
-        file=open(path+'packages/'+content['name']+"_nsd.yaml", "w")
-        file.write(ns_template.render(content))
-
-        # check MIME type of the file
-        mime = magic.Magic(mime=True)
-        print(mime.from_file(path+'packages/'+content['name']+"_nsd.yaml"))
-
-        #----------------# Onboarding #----------------#
-        osm_server = cherrypy.config.get("osm_server")
-        ob_nsd = sp.Popen(['osm --hostname '+osm_server+' nsd-create '+path+'packages/'+content['name']+'_nsd.yaml'], stdout = sp.PIPE, shell=True)
-        ob_nsd_out, ob_nsd_err = ob_nsd.communicate()
-        print(f'\n\nob_nsd_out: \n{ob_nsd_out.decode()}\nob_nsd_err: \n{ob_nsd_err}')
-
-
-    @cherrypy.tools.json_in()
-    @json_out(cls=NestedEncoder)
-    def instantiate_ns(self):
-        cherrypy.log("Request to create ns instance received")
-        content = cherrypy.request.json
-
-        # Instantiate the NS
-        osm_server = cherrypy.config.get("osm_server")
-        myclient = client.Client(host=osm_server, sol005=True)
-        
-        # nsr_name <=> ns_name && account <=> vim account
-        resp = myclient.ns.create(nsd_name=content['name']+'-ns', nsr_name=content['name'], account=content['vim-account'])
-        
         return resp
 
 

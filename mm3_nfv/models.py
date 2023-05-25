@@ -1031,6 +1031,18 @@ class BadRequest(Error):
         )
 
 
+class Unauthorized(Error):
+    def __init__(self, e: Exception):
+        Error.__init__(
+            self,
+            type="about:blank",
+            title="Incorrect credentials were passed to the request",
+            status=401,
+            detail=str(e).split('\n')[0],
+            instance=cherrypy.request.path_info
+        )
+
+
 class Forbidden(Error):
     def __init__(self, detail : str = "This operation not allowed"):
         Error.__init__(

@@ -1,0 +1,22 @@
+nsd:
+    nsd:
+    - description: {{ description }}
+      designer: {{ designer }}
+      df:
+      - id: default-df
+        vnf-profile:
+        - id: {{ name }}
+          virtual-link-connectivity:
+          - constituent-cpd-id:
+            - constituent-base-element-id: {{ name }}
+              constituent-cpd-id: mgmt-ext
+            virtual-link-profile-id: mgmtnet
+          vnfd-id: {{ name }}_knf
+      id: {{ name }}_ns
+      name: {{ name }}_ns
+      version: {{ version }}
+      virtual-link-desc:
+      - id: mgmtnet
+        mgmt-network: true
+      vnfd-id:
+      - {{ name }}_knf

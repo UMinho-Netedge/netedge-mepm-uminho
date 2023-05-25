@@ -117,6 +117,22 @@ def main(database: Type[DatabaseBase]):
     )
 
     mepm_dispatcher.connect(
+        name="Create KNF Descriptor from file",
+        action="create_vnfd_file",
+        controller=AppLcmController,
+        route="/app_instances/create_vnfd_file",
+        conditions=dict(method=["POST"]),
+    )
+
+    mepm_dispatcher.connect(
+        name="Create NS Descriptor from file",
+        action="create_nsd_file",
+        controller=AppLcmController,
+        route="/app_instances/create_nsd_file",
+        conditions=dict(method=["POST"]),
+    )
+
+    mepm_dispatcher.connect(
         name="Instantiate NS",
         action="instantiate_ns",
         controller=AppLcmController,
@@ -139,6 +155,8 @@ def main(database: Type[DatabaseBase]):
     cherrypy.config.update({'error_page.404': error_page_404})
     cherrypy.config.update({'error_page.403': error_page_403})
     cherrypy.config.update({'error_page.400': error_page_400})
+    cherrypy.config.update({'error_page.409': error_page_409})
+
 
 
     ######################################
@@ -165,6 +183,12 @@ def error_page_403(status, message, traceback, version):
 
 def error_page_400(status, message, traceback, version):
     error_msg = "The operation is not allowed given the current status of the resource."
+    error = BadRequest(error_msg)
+    cherrypy.response.headers['Content-Type'] = "application/problem+json"
+    return json.dumps(error.message().to_json())
+
+def error_page_409(status, message, traceback, version):
+    error_msg = "The operation is not allowed due to a resource conflict."
     error = BadRequest(error_msg)
     cherrypy.response.headers['Content-Type'] = "application/problem+json"
     return json.dumps(error.message().to_json())
