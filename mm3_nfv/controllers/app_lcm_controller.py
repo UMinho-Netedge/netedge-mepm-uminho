@@ -129,6 +129,7 @@ class AppLcmController:
             state = appState.to_json(),
             indication = "STARTING",
             nsInstanceId = ns_id,
+            vimAccountId = data['vimAccountId'],
         )
 
         cherrypy.thread_data.db.create("appStatus", appStatusDict)
@@ -424,9 +425,25 @@ class AppLcmController:
             error = BadRequest(e)
             return error.message()
 
+
+        # check for ip on MEPregistration db
+        mepReg = cherrypy.thread_data.db.query_col(
+            "mepRegistration",
+            query=dict(vimAccountId=appStatus["vimAccountId"]),
+            find_one=True,
+            )
+        
+        if mepReg is None:
+            error_msg = "VIM Account %s not registered in MEP." % (data["vimAccountId"])
+            error = Conflict(error_msg)
+            return error.message()
+        else:
+            mm5_address = mepReg['ip']
+            mm5_port = mepReg['port']
+
         # Send configuration to MEP via Mm5
-        mm5_address = cherrypy.config.get("mm5_address")
-        mm5_port = cherrypy.config.get("mm5_port")
+        #mm5_address = cherrypy.config.get("mm5_address")
+        #mm5_port = cherrypy.config.get("mm5_port")
         url = "http://%s:%s/mec_platform_mgmt/v1/app_instances/%s/configure_platform_for_app" % (mm5_address, mm5_port, appInstanceId)
         mm5_response = requests.post(url, headers=HEADERS, data=json.dumps(data_aux))
 
@@ -810,25 +827,40 @@ class AppLcmController:
         return resp
     
 
-
-################################################################################
-
     @cherrypy.tools.json_in()
     @json_out(cls=NestedEncoder)
-    def instantiate_ns(self):
-        cherrypy.log("Request to create ns instance received")
+    def vim_mep_registration(self):
+        cherrypy.log("Request to register VIM to MEP received")
         content = cherrypy.request.json
 
-        # Instantiate the NS
-        osm_server = cherrypy.config.get("osm_server")
-        myclient = client.Client(host=osm_server, sol005=True)
-        
-        # nsr_name <=> ns_name && account <=> vim account
-        resp = myclient.ns.create(nsd_name=content['name']+'-ns', nsr_name=content['name'], account=content['vim-account'])
-        
-        return resp
+        vim_id = content['vim-account']
+        ip = content['ip']
+        port = content['port']
+
+        mepReg = cherrypy.thread_data.db.query_col(
+            "mepRegistration",
+            query=dict(vimAccountId=vim_id),
+            find_one=True,
+        )
+
+        if mepReg is None:
+            # create a new entry
+            cherrypy.thread_data.db.create(
+                "mepRegistration",
+                {"vimAccountId": vim_id, "port": port, "ip": ip},
+            )
+            return "Created new entry with VIM ID: " + vim_id + " IP: " + ip + " and port: " + str(port)
+        else:
+            # update existing entry
+            cherrypy.thread_data.db.update(
+                "mepRegistration",
+                {"vimAccountId": vim_id},
+                {"port": port, "ip": ip},
+            )
+            return "Updated entry with VIM ID: " + vim_id + " IP: " + ip + " and port: " + str(port)
     
 
+################################################################################
 
     @json_out(cls=NestedEncoder)
     def osmclient_tests(self, appInstanceId: str):

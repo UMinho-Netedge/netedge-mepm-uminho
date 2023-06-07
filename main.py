@@ -133,10 +133,10 @@ def main(database: Type[DatabaseBase]):
     )
 
     mepm_dispatcher.connect(
-        name="Instantiate NS",
-        action="instantiate_ns",
+        name="VIM-MEP registration",
+        action="vim_mep_registration",
         controller=AppLcmController,
-        route="/app_instances/instantiate_ns",
+        route="/vim_mep_registration",
         conditions=dict(method=["POST"]),
     )
     
