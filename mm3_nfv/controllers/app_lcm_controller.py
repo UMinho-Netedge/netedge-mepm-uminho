@@ -108,7 +108,7 @@ class AppLcmController:
         osmclient = client.Client(host=osm_server, sol005=True)
         
         try:
-            # nsr_name <=> ns_name && account <=> vim account
+            # (nsr_name <=> ns_name), (account <=> vim account)
             ns_id = osmclient.ns.create(nsd_name=data['nsdId'], nsr_name=data['nsName'], account=data['vimAccountId'])
 
         except ClientException as e:
@@ -123,6 +123,25 @@ class AppLcmController:
 
         # TODO:  errors 406 and 429
 
+        ########################################################################
+        # Look for ip and port linked to vimAccountId
+        try:
+            # search for the vim account in the k8s clusters
+            k8s_clusters = osmclient.k8scluster.list()
+            for cluster in k8s_clusters:
+                cluster_info = osmclient.k8scluster.get(cluster['name'])
+                if cluster_info['vim_account'] == data['vimAccountId']:
+                    url = cluster_info["credentials"]["clusters"][0]["cluster"]["server"]
+                    match = re.match(r"https?://([\d.]+):(\d+)", url)
+                    ip_address = match.group(1)
+                    port = int(match.group(2))
+                    break
+        except Exception as e:
+            error = BadRequest(e)
+            return error.message()
+
+        ########################################################################
+
         appState  = AppInstanceState(InstantiationState.INSTANTIATED.value, OperationalState.STARTED.value)
         appStatusDict = dict(
             appInstanceId = appInstanceId,
@@ -130,6 +149,8 @@ class AppLcmController:
             indication = "STARTING",
             nsInstanceId = ns_id,
             vimAccountId = data['vimAccountId'],
+            ip = ip_address,
+            port = cherrypy.config.get("mm5_port"),
         )
 
         cherrypy.thread_data.db.create("appStatus", appStatusDict)
@@ -209,8 +230,10 @@ class AppLcmController:
 
         # Send to MEP via Mm5
         # TODO: catch errors from mep
-        mm5_address = cherrypy.config.get("mm5_address")
-        mm5_port = cherrypy.config.get("mm5_port")
+        #mm5_address = cherrypy.config.get("mm5_address")
+        #mm5_port = cherrypy.config.get("mm5_port")
+        mm5_address = appStatus["ip"]
+        mm5_port = appStatus["port"]
         
         print("DATA: ", data)
         url = "http://%s:%s/mec_platform_mgmt/v1/app_instances/%s/operate" % (mm5_address, mm5_port, appInstanceId)
@@ -299,8 +322,10 @@ class AppLcmController:
             return error.message()
 
         # Send to MEP via Mm5
-        mm5_address = cherrypy.config.get("mm5_address")
-        mm5_port = cherrypy.config.get("mm5_port")
+        #mm5_address = cherrypy.config.get("mm5_address")
+        #mm5_port = cherrypy.config.get("mm5_port")
+        mm5_address = appStatus["ip"]
+        mm5_port = appStatus["port"]
         url = "http://%s:%s/mec_platform_mgmt/v1/app_instances/%s/terminate" % (mm5_address, mm5_port, appInstanceId)
         mm5_response = requests.post(url, headers=HEADERS, data=json.dumps(data))
 
@@ -425,7 +450,7 @@ class AppLcmController:
             error = BadRequest(e)
             return error.message()
 
-
+        """
         # check for ip on MEPregistration db
         mepReg = cherrypy.thread_data.db.query_col(
             "mepRegistration",
@@ -440,10 +465,13 @@ class AppLcmController:
         else:
             mm5_address = mepReg['ip']
             mm5_port = mepReg['port']
+        """
 
         # Send configuration to MEP via Mm5
         #mm5_address = cherrypy.config.get("mm5_address")
         #mm5_port = cherrypy.config.get("mm5_port")
+        mm5_address = appStatus["ip"]
+        mm5_port = appStatus["port"]
         url = "http://%s:%s/mec_platform_mgmt/v1/app_instances/%s/configure_platform_for_app" % (mm5_address, mm5_port, appInstanceId)
         mm5_response = requests.post(url, headers=HEADERS, data=json.dumps(data_aux))
 
@@ -862,57 +890,40 @@ class AppLcmController:
 
 ################################################################################
 
+    @cherrypy.tools.json_in()
     @json_out(cls=NestedEncoder)
     def osmclient_tests(self, appInstanceId: str):
         cherrypy.log("Request to test osmclient received")
+
+        data = cherrypy.request.json
+        try:
+            InstantiateNsRequest.from_json(data)
+    
+        except (TypeError, jsonschema.exceptions.ValidationError) as e:
+            error = BadRequest(e)
+            return error.message()
         
         osm_server = cherrypy.config.get("osm_server")
-        myclient = client.Client(host=osm_server, sol005=True)
-        #resp = myclient.nsd.list()
-        #print(yaml.safe_dump(resp, indent=4, default_flow_style=False))
+        osmclient = client.Client(host=osm_server, sol005=True)
+        
+        vimAccount = osmclient.ns.get(data['nsName'])
+        #['instantiate_params']['vimAccountId']
 
-        #ns package create on OSM
-        pkg = common.package_tool.PackageTool(myclient)
+        # search for the vim account in the k8s clusters
+        k8s_clusters = osmclient.k8scluster.list()
+        for cluster in k8s_clusters:
+            cluster_info = osmclient.k8scluster.get(cluster['name'])
+            if cluster_info['vim_account'] == data['vimAccountId']:
+                url = cluster_info["credentials"]["clusters"][0]["cluster"]["server"]
+                match = re.match(r"https?://([\d.]+):(\d+)", url)
+                ip_address = match.group(1)
+                port = int(match.group(2))
 
-        def create_pkg(
-            package_type,
-            package_name,
-            base_directory = "packages",
-            image = "image-name",
-            vdus = 1,
-            vcpu = 1,
-            memory = 1024,
-            storage = 10,
-            interfaces = 0,
-            vendor = "OSM",
-            override = False,
-            detailed = False,
-            netslice_subnets = 1,
-            netslice_vlds = 1,
-            old = False,
-        ):
-            return pkg.create(
-                package_type, package_name, base_directory, image, vdus, vcpu, 
-                memory, storage, interfaces, vendor, override, detailed, 
-                netslice_subnets, netslice_vlds, old)
-            
-        print("Creating VNFD package")
-        resp1 = create_pkg("vnf", "vnfd")
-        print(resp1)
+                print("IP: " + ip_address, "; Port: " + str(port))
+ 
+            print(url)
 
-
-        print("Creating NSD package")
-        resp2 = create_pkg("ns", "nsd")
-        print(resp2)
-
-        print("Validating, building and onboarding NSD package")
-        #resp = myclient.vnf.create(resp2)
-
-        #TODO: Create NSD on OSM
-        # nsr_name <=> ns_name && account <=> vim account
-        resp = myclient.ns.create(nsd_name="nsd", nsr_name="insomnia", account='e1d59009-8237-4319-a2aa-98f6c02aeaee')
-
-        return resp
+        return url
 
 
 

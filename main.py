@@ -97,7 +97,7 @@ def main(database: Type[DatabaseBase]):
         action="osmclient_tests",
         controller=AppLcmController,
         route="/app_instances/:appInstanceId/osmclient",
-        conditions=dict(method=["GET"]),
+        conditions=dict(method=["POST"]),
     )
 
     mepm_dispatcher.connect(
