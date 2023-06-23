@@ -34,16 +34,14 @@ import magic
 import re
 
 HEADERS = {"Content-Type": "application/json"}
-    
-#MM5_PORT = cherrypy.config.get("mm5_port")
-#MM5_ADDRESS = cherrypy.config.get("mm5_address")
-#OSM_SERVER = cherrypy.config.get("osm_server")
 
 class AppLcmController:
 #######################################################################################
 #                                   LCM OPERATIONS                                    #
 #                        Instantiate, Operate, and Terminate                          #
 #######################################################################################
+    
+    # TODO:  errors 406 and 429
     @cherrypy.tools.json_in()
     @json_out(cls=NestedEncoder)
     def instantiateApp(self, appInstanceId: str):
@@ -96,8 +94,6 @@ class AppLcmController:
 
         try:
             instantiateNsRequest = InstantiateNsRequest.from_json(data)
-            #InstantiateAppRequest class
-            #instantiateAppRequest = InstantiateAppRequest.from_json(data)
 
         except (TypeError, jsonschema.exceptions.ValidationError) as e:
             error = BadRequest(e)
@@ -112,7 +108,6 @@ class AppLcmController:
             ns_id = osmclient.ns.create(nsd_name=data['nsdId'], nsr_name=data['nsName'], account=data['vimAccountId'])
 
         except ClientException as e:
-            # Handle ClientException errors here
             print("ClientException:", str(e))
             print(f"class {e.__class__}")
         
@@ -121,9 +116,6 @@ class AppLcmController:
             return error.message()
 
 
-        # TODO:  errors 406 and 429
-
-        ########################################################################
         # Look for ip and port linked to vimAccountId
         try:
             # search for the vim account in the k8s clusters
@@ -134,13 +126,12 @@ class AppLcmController:
                     url = cluster_info["credentials"]["clusters"][0]["cluster"]["server"]
                     match = re.match(r"https?://([\d.]+):(\d+)", url)
                     ip_address = match.group(1)
-                    port = int(match.group(2))
+                    #port = int(match.group(2))
                     break
         except Exception as e:
             error = BadRequest(e)
             return error.message()
 
-        ########################################################################
 
         appState  = AppInstanceState(InstantiationState.INSTANTIATED.value, OperationalState.STARTED.value)
         appStatusDict = dict(
@@ -228,18 +219,13 @@ class AppLcmController:
         )
 
 
-        # Send to MEP via Mm5
+        # Send request to MEP via Mm5
         # TODO: catch errors from mep
-        #mm5_address = cherrypy.config.get("mm5_address")
-        #mm5_port = cherrypy.config.get("mm5_port")
         mm5_address = appStatus["ip"]
         mm5_port = appStatus["port"]
         
-        print("DATA: ", data)
         url = "http://%s:%s/mec_platform_mgmt/v1/app_instances/%s/operate" % (mm5_address, mm5_port, appInstanceId)
         mm5_response = requests.post(url, headers=HEADERS, data=json.dumps(data))
-        print("Mm5 response: ", mm5_response.status_code)
-        #print("Mm5 response json: ", mm5_response.json())
         
         code = mm5_response.status_code
         if code == 400:
@@ -254,8 +240,6 @@ class AppLcmController:
             detail = mm5_response.json()['detail']
             error = Error(detail)
             return error.message()
-
-
 
         cherrypy.thread_data.db.update(
             "appStatus", 
@@ -277,7 +261,7 @@ class AppLcmController:
         cherrypy.thread_data.db.create("lcmOperations", lcmOperationOccurence)
 
         # Send operate app message to MEP
-        # check if there is a way to stop an NS on osmclient => apenas é possível criar e apagar
+        # check if there is a way to stop an NS on osmclient => only create and delete
        
         return dict(lifecycleOperationOccurrenceId=lifecycleOperationOccurrenceId)
 
@@ -322,8 +306,6 @@ class AppLcmController:
             return error.message()
 
         # Send to MEP via Mm5
-        #mm5_address = cherrypy.config.get("mm5_address")
-        #mm5_port = cherrypy.config.get("mm5_port")
         mm5_address = appStatus["ip"]
         mm5_port = appStatus["port"]
         url = "http://%s:%s/mec_platform_mgmt/v1/app_instances/%s/terminate" % (mm5_address, mm5_port, appInstanceId)
@@ -450,26 +432,7 @@ class AppLcmController:
             error = BadRequest(e)
             return error.message()
 
-        """
-        # check for ip on MEPregistration db
-        mepReg = cherrypy.thread_data.db.query_col(
-            "mepRegistration",
-            query=dict(vimAccountId=appStatus["vimAccountId"]),
-            find_one=True,
-            )
-        
-        if mepReg is None:
-            error_msg = "VIM Account %s not registered in MEP." % (data["vimAccountId"])
-            error = Conflict(error_msg)
-            return error.message()
-        else:
-            mm5_address = mepReg['ip']
-            mm5_port = mepReg['port']
-        """
-
         # Send configuration to MEP via Mm5
-        #mm5_address = cherrypy.config.get("mm5_address")
-        #mm5_port = cherrypy.config.get("mm5_port")
         mm5_address = appStatus["ip"]
         mm5_port = appStatus["port"]
         url = "http://%s:%s/mec_platform_mgmt/v1/app_instances/%s/configure_platform_for_app" % (mm5_address, mm5_port, appInstanceId)
@@ -492,7 +455,7 @@ class AppLcmController:
         if mm5_response.status_code != 201:
             lcmOperationOccurence = dict(
                 lifecycleOperationOccurrenceId=lifecycleOperationOccurrenceId,
-                appInstanceId=appInstanceId, 
+                appInstanceId=appInstanceId,
                 stateEnteredTime=lastModified,
                 operation="STARTING",
                 operationStatus=OperationState.FAILED_TEMP.name
@@ -519,7 +482,7 @@ class AppLcmController:
 
         return dict(lifecycleOperationOccurrenceId=lifecycleOperationOccurrenceId)
 
-
+    """
     @cherrypy.tools.json_in()
     @json_out(cls=NestedEncoder)
     def mecApp_update_config(self, appInstanceId: str):
@@ -589,8 +552,7 @@ class AppLcmController:
         return None
 
 
-    # TODO: CHECK IF THIS IS CORRECT
-    # INCOMPLETE
+    # TODO: Complete and test
     @cherrypy.tools.json_in()
     @json_out(cls=NestedEncoder)
     def mecApp_config_get(self, appInstanceId: str):
@@ -627,10 +589,10 @@ class AppLcmController:
         dns_rules = [DNSRuleDescriptor(dnsRule=DNSRule.from_json(rule)) for rule in dns_rules]
 
         return ConfigPlatformForAppResponse(appTrafficRule=traffic_rules, appDNSRule=dns_rules)
-
+    """
 
     @json_out(cls=NestedEncoder)
-    def lcmOpp_get(self, **kwargs):
+    def lcmOpp_get_all(self, **kwargs):
         """
         Get the status of all LCM operations
         """
@@ -646,7 +608,7 @@ class AppLcmController:
 
 
     @json_out(cls=NestedEncoder)
-    def lcmOpp_get_with_lcmoppId(self, appLcmOpOccId:str, **kwargs):
+    def lcmOpp_get(self, appLcmOpOccId:str, **kwargs):
         """
         Get the status of a LCM operation
         """
@@ -680,7 +642,6 @@ class AppLcmController:
         # Load templates file from templates folder
         path = '/home/netedge/mm3_nfv/'
         path_yaml = path+'packages/'+content['name']+"_vnfd.yaml"
-
         
         #----------------# KNF Descriptor #----------------#
         env = Environment(loader = FileSystemLoader(path+'templates/'), trim_blocks=True, lstrip_blocks=True)
@@ -689,19 +650,12 @@ class AppLcmController:
         # Create a KNF descriptor by given parameters in a dictionary
         with open(path_yaml, "w") as f:
             output = f.write(knf_template.render(content))
-        
-        """ 
-        # check MIME type of the file
-        mime = magic.Magic(mime=True)
-        print(mime.from_file(path+'packages/'+content['name']+"_vnfd.yaml"))
-        """
 
         #----------------# Onboarding #----------------#
         osm_server = cherrypy.config.get("osm_server")
         bashCommand = 'osm --hostname '+osm_server+' vnfd-create '+path_yaml
 
         try:
-            # https://stackoverflow.com/questions/4256107/running-bash-commands-in-python
             ob_vnfd = sp.run(
                 bashCommand.split(),
                 check=True, 
@@ -711,10 +665,6 @@ class AppLcmController:
             resp = ob_vnfd.stdout.decode().strip()
 
         except sp.CalledProcessError as e:
-            #print("Error: ", e.output)
-            #print('return code ', e.returncode)
-            #print('stderr ', e.stderr)
-
             # Processing error message from osmclient
             match = re.match(r'.*?(\{.*\}).*', e.output.decode(), re.DOTALL)
     
@@ -749,7 +699,7 @@ class AppLcmController:
         try:
             ob_vnfd = sp.run(
                 bashCommand.split(),  
-                check=True,  
+                check=True,
                 capture_output=True)
            
             resp = ob_vnfd.stdout.decode().strip()
@@ -854,7 +804,8 @@ class AppLcmController:
         
         return resp
     
-
+    
+    """
     @cherrypy.tools.json_in()
     @json_out(cls=NestedEncoder)
     def vim_mep_registration(self):
@@ -887,43 +838,4 @@ class AppLcmController:
             )
             return "Updated entry with VIM ID: " + vim_id + " IP: " + ip + " and port: " + str(port)
     
-
-################################################################################
-
-    @cherrypy.tools.json_in()
-    @json_out(cls=NestedEncoder)
-    def osmclient_tests(self, appInstanceId: str):
-        cherrypy.log("Request to test osmclient received")
-
-        data = cherrypy.request.json
-        try:
-            InstantiateNsRequest.from_json(data)
-    
-        except (TypeError, jsonschema.exceptions.ValidationError) as e:
-            error = BadRequest(e)
-            return error.message()
-        
-        osm_server = cherrypy.config.get("osm_server")
-        osmclient = client.Client(host=osm_server, sol005=True)
-        
-        vimAccount = osmclient.ns.get(data['nsName'])
-        #['instantiate_params']['vimAccountId']
-
-        # search for the vim account in the k8s clusters
-        k8s_clusters = osmclient.k8scluster.list()
-        for cluster in k8s_clusters:
-            cluster_info = osmclient.k8scluster.get(cluster['name'])
-            if cluster_info['vim_account'] == data['vimAccountId']:
-                url = cluster_info["credentials"]["clusters"][0]["cluster"]["server"]
-                match = re.match(r"https?://([\d.]+):(\d+)", url)
-                ip_address = match.group(1)
-                port = int(match.group(2))
-
-                print("IP: " + ip_address, "; Port: " + str(port))
- 
-            print(url)
-
-        return url
-
-
-
+    """

@@ -29,9 +29,9 @@ import os
 @json_out(cls=NestedEncoder)
 def main(database: Type[DatabaseBase]):
 
-    #############################################
+    ################################################
     # MEC Platform Management interfaces (mm3_nfv) #
-    #############################################
+    ################################################
     mepm_dispatcher = cherrypy.dispatch.RoutesDispatcher()
 
     mepm_dispatcher.connect(
@@ -66,6 +66,7 @@ def main(database: Type[DatabaseBase]):
         conditions=dict(method=["POST"]),
     )
 
+    """
     mepm_dispatcher.connect(
         name="Get configuration of MEC App instance",
         action="mecApp_config_get",
@@ -73,6 +74,7 @@ def main(database: Type[DatabaseBase]):
         route="/applications/:appInstanceId/configuration",
         conditions=dict(method=["GET"]),
     )
+    """
 
     mepm_dispatcher.connect(
         name="Query all LCM Operations",
@@ -88,16 +90,6 @@ def main(database: Type[DatabaseBase]):
         controller=AppLcmController,
         route="/app_lcm_op_occs/:appLcmOpOccId",
         conditions=dict(method=["GET"]),
-    )
-
-
-    ############################################################################
-    mepm_dispatcher.connect(
-        name="Testing OSMclient",
-        action="osmclient_tests",
-        controller=AppLcmController,
-        route="/app_instances/:appInstanceId/osmclient",
-        conditions=dict(method=["POST"]),
     )
 
     mepm_dispatcher.connect(
@@ -132,6 +124,7 @@ def main(database: Type[DatabaseBase]):
         conditions=dict(method=["POST"]),
     )
 
+    """
     mepm_dispatcher.connect(
         name="VIM-MEP registration",
         action="vim_mep_registration",
@@ -139,8 +132,7 @@ def main(database: Type[DatabaseBase]):
         route="/vim_mep_registration",
         conditions=dict(method=["POST"]),
     )
-    
-    ############################################################################
+    """
 
     cherrypy.config.update(
         {"server.socket_host": "0.0.0.0", "server.socket_port": 8083}
