@@ -46,11 +46,20 @@ class AppLcmController:
     @json_out(cls=NestedEncoder)
     def instantiateApp(self, appInstanceId: str):
         """
-            7.4.6 Resource: instantiate application instance task
-            Resource URI: {apiRoot}/app_lcm/v1/app_instances/{appInstanceId}/instantiate
-            7.4.6.1 Description
-            This resource represents the task of instantiating an application instance. 
-            The client can use this resource to instantiate an application instance.
+        This resource represents the task of instantiating an application instance. The client can use this resource to instantiate an application instance.
+
+        7.4.6 Resource: instantiate application instance task
+        Resource URI: {apiRoot}/app_lcm/v1/app_instances/{appInstanceId}/instantiate
+                
+        Query Params
+        :param appInstanceId: Identifier of the application instance to be instantiated.
+        :type appInstanceId: str
+
+        Request Body: InstantiateNsRequest
+
+        :return: lifecycleOperationOccurrenceId or Problem details
+        HTTP STATUS CODE: 202, 400, 403, 404, 409
+        
         """
         
         cherrypy.log("Received request to instantiate app %s" %appInstanceId)
@@ -167,11 +176,20 @@ class AppLcmController:
     @json_out(cls=NestedEncoder)
     def operateApp(self, appInstanceId: str):
         """
-            7.4.8 Resource: operate application instance task
-            Resource URI: {apiRoot}/app_lcm/v1/app_instances/{appInstanceId}/operate
-            7.4.8.1 Description
-            This resource represents the task of changing the operational state of the application instance. The client can use this
-            resource to start or stop an application instance.
+        This resource represents the task of changing the operational state of the application instance. The client can use this resource to start or stop an application instance.
+        
+        7.4.8 Resource: operate application instance task
+        Resource URI: {apiRoot}/app_lcm/v1/app_instances/{appInstanceId}/operate
+        
+        Query Params
+        :param appInstanceId: The identifier of the application instance for which the operational state is to be modified.
+        :type appInstanceId: str
+
+        Request Body: OperateAppRequest
+
+        :return: lifecycleOperationOccurrenceId or Problem details
+        HTTP STATUS CODE: 200, 400, 409
+        
         """
         cherrypy.log("Received request to change app %s state" %appInstanceId)
 
@@ -270,11 +288,20 @@ class AppLcmController:
     @json_out(cls=NestedEncoder)
     def terminateApp(self, appInstanceId: str):
         """
-            7.4.7 Resource: terminate application instance task
-            Resource URI: {apiRoot}/app_lcm/v1/app_instances/{appInstanceId}/terminate
-            7.4.7.1 Description
-            This resource represents the task of terminating an application instance. The client can use this resource to terminate an
-            application instance.
+        This resource represents the task of terminating an application instance. The client can use this resource to terminate an application instance.
+        
+        7.4.7 Resource: terminate application instance task
+        Resource URI: {apiRoot}/app_lcm/v1/app_instances/{appInstanceId}/terminate
+        
+        Query Params
+        :param appInstanceId: The identifier of the application instance to be terminated.
+        :type appInstanceId: str
+
+        Request Body: TerminateAppInstance
+
+        :return: lifecycleOperationOccurrenceId or Problem details
+        HTTP STATUS CODE: 201, 400, 404, 409
+
         """
         cherrypy.log("Received request to terminate app %s" %appInstanceId)
 
@@ -388,14 +415,23 @@ class AppLcmController:
     @json_out(cls=NestedEncoder)
     def configurePlatformForApp(self, appInstanceId: str):
         """
-            Resource URI: {apiRoot}/app_lcm/v1/app_instances/{appInstanceId}/configure_platform_for_app
+        This resource represents the task of providing configuration information in AppD to the MEPM-V, intended to
+        configure the MEP to run an application instance which is instantiated from the AppD. The configuration information
+        includes the traffic rules, DNS rules, the required and optional services, and services produced by the application
+        instance, etc. The client can use this resource to provide to the MEPM-V configuration information for the MEP to run
+        an application instance after the corresponding VNF instance has been instantiated by NFV-MANO.
 
-            7.7.6 Resource: configure_platform_for_app task
-            This resource represents the task of providing configuration information in AppD to the MEPM-V, intended to
-            configure the MEP to run an application instance which is instantiated from the AppD. The configuration information
-            includes the traffic rules, DNS rules, the required and optional services, and services produced by the application
-            instance, etc. The client can use this resource to provide to the MEPM-V configuration information for the MEP to run
-            an application instance after the corresponding VNF instance has been instantiated by NFV-MANO.
+        7.7.6 Resource: configure_platform_for_app task
+        Resource URI: {apiRoot}/app_lcm/v1/app_instances/{appInstanceId}/configure_platform_for_app
+
+        Query Parameters:
+        :param appInstanceId: Identifier of the application instance to be configured.
+        :type appInstanceId: str
+
+        Request Body: ConfigPlatformForAppRequest
+
+        :return: lifecycleOperationOccurrenceId or ProblemDetails
+        HTTP STATUS CODE: 201, 400, 404, 409
         """
         
         cherrypy.log("Received request to configure app %s" %appInstanceId)
@@ -594,7 +630,10 @@ class AppLcmController:
     @json_out(cls=NestedEncoder)
     def lcmOpp_get_all(self, **kwargs):
         """
-        Get the status of all LCM operations
+        This resource representes the task of getting the status of all LCM operations
+
+        :return: A list of LCM operation occurrences or ProblemDetails
+        HTTP STATUS CODE: 200, 400
         """
         
         if kwargs != {}:
@@ -610,7 +649,13 @@ class AppLcmController:
     @json_out(cls=NestedEncoder)
     def lcmOpp_get(self, appLcmOpOccId:str, **kwargs):
         """
-        Get the status of a LCM operation
+        This resource representes the task of getting the status of a given LCM operation
+
+        :param appLcmOpOccId: Identifier of the LCM operation occurrence
+
+        :return: A LCM operation occurrence or ProblemDetails
+        HTTP STATUS CODE: 200, 400, 404
+
         """
 
         if kwargs != {}:
@@ -635,6 +680,19 @@ class AppLcmController:
     def create_vnfd(self):
         '''
         Uses osmclient to create knf packages with the descriptors
+
+        :param: content: dictionary with the parameters to create the VNF descriptor
+        Request body example:
+        {
+            "name": "mep",
+            "description": "NetEdge-MEP is a KNF-based ETSI-compliant MEP developed by UMinho",
+            "designer": "Netedge",
+            "provider": "ALGORITMI-UMinho",
+            "version": 1.0,
+            "helm_chart":"netedge-charts/netedge-mep-tests",
+        }
+
+        :return: str with the ID of the VNF descriptor or ProblemDetails
         '''
         cherrypy.log("Request to create packages received")
         content = cherrypy.request.json
@@ -685,6 +743,14 @@ class AppLcmController:
     def create_vnfd_file(self):
         '''
         Uses osmclient to create knfs with the descriptors
+
+        :param: content: dictionary with the tar.gz file to create the VNF descriptor
+        Request body example:
+        {
+            "file_name": "test_knf.tar.gz"
+        }
+
+        :return: ID of the VNF descriptor or ProblemDetails
         '''
         cherrypy.log("Request to create VNF descriptor received")
         content = cherrypy.request.json
@@ -723,6 +789,17 @@ class AppLcmController:
     def create_nsd(self):
         '''
         Uses osmclient to create NSs with the descriptors
+
+        :param: content: dictionary with the parameters to create the NS descriptor
+        Request body example:
+        {
+            "name": "mep",
+            "description": "NetEdge-MEP is a KNF-based ETSI-compliant MEP developed by UMinho",
+            "designer": "Netedge",
+            "version": 1.0
+        }
+
+        :return: str with the ID of the NS descriptor or ProblemDetails
         '''
         cherrypy.log("Request to create NS descriptor received")
         content = cherrypy.request.json
@@ -771,6 +848,14 @@ class AppLcmController:
     def create_nsd_file(self):
         '''
         Uses osmclient to create NSs with the descriptors
+
+        :param: content: dictionary with the tar.gz file to create the NS descriptor
+        Request body example:
+        {
+            "file_name": "test_ns.tar.gz"
+        }
+
+        :return: ID of the NS descriptor or ProblemDetails
         '''
         cherrypy.log("Request to create NS descriptor received")
         content = cherrypy.request.json

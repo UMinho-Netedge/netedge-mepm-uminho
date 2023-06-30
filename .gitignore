@@ -213,3 +213,5 @@ internal-tests/
 #Remove charts
 *.tgz
 
+
+osmclient
